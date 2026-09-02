@@ -11,7 +11,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import settings  # noqa: E402
 from app.database import Base  # noqa: E402
-from app.models import Cart, CartItem, Product  # noqa: E402,F401
+from app.models import (  # noqa: E402,F401
+    AgentMessage,
+    AgentSession,
+    AuditEvent,
+    Cart,
+    CartItem,
+    Product,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

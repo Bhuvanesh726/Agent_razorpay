@@ -12,6 +12,16 @@ from app.core.config import settings
 
 _request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
 
+# Attributes every LogRecord carries by default — anything else on a record
+# is a caller-supplied `extra` field and gets included verbatim. This lets
+# any part of the app (request logging, the LLM gateway, ...) attach
+# structured fields without the formatter needing to know their names ahead
+# of time.
+_STANDARD_LOG_RECORD_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__) | {
+    "message",
+    "asctime",
+}
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -22,10 +32,10 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
             "request_id": getattr(record, "request_id", _request_id_ctx.get()),
         }
-        for key in ("method", "path", "status_code", "duration_ms"):
-            if hasattr(record, key):
-                payload[key] = getattr(record, key)
-        return json.dumps(payload)
+        for key, value in record.__dict__.items():
+            if key not in _STANDARD_LOG_RECORD_ATTRS and key != "request_id":
+                payload[key] = value
+        return json.dumps(payload, default=str)
 
 
 def configure_logging() -> None:

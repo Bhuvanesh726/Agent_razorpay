@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import RequestLoggingMiddleware, configure_logging
-from app.routers import cart, health, products
+from app.routers import agent, audit, cart, health, products
 
 configure_logging()
 
@@ -21,3 +21,5 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(products.router)
 app.include_router(cart.router)
+app.include_router(agent.router)
+app.include_router(audit.router)

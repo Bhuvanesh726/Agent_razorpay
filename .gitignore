@@ -9,6 +9,7 @@ __pycache__/
 *.pyc
 backend/*.db
 backend/*.db-journal
+.pytest_cache/
 
 # Node / Next.js
 frontend/node_modules/

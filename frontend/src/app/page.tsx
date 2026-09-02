@@ -7,6 +7,7 @@ import CategoryTabs from "@/components/CategoryTabs";
 import SearchBox from "@/components/SearchBox";
 import ProductGrid from "@/components/ProductGrid";
 import CartSidebar from "@/components/CartSidebar";
+import ChatPanel from "@/components/ChatPanel";
 
 export default function Home() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -19,9 +20,13 @@ export default function Home() {
   const [addingSku, setAddingSku] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
 
+  function refreshCart() {
+    fetchCart().then(setCart).catch((e) => setError(e.message));
+  }
+
   useEffect(() => {
     fetchCategories().then(setCategories).catch((e) => setError(e.message));
-    fetchCart().then(setCart).catch((e) => setError(e.message));
+    refreshCart();
   }, []);
 
   useEffect(() => {
@@ -64,7 +69,9 @@ export default function Home() {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
       <header>
         <h1 className="text-2xl font-semibold">Razorpay Shop</h1>
-        <p className="text-sm text-gray-500">Layer 0 — no AI yet, just the shopping basics.</p>
+        <p className="text-sm text-gray-500">
+          Layer 1 — browse and add manually, or ask the assistant. Every money action it takes is policy-gated and logged.
+        </p>
       </header>
 
       {error && (
@@ -73,7 +80,7 @@ export default function Home() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px_300px]">
         <main className="flex flex-col gap-4">
           <SearchBox value={search} onChange={setSearch} />
           <CategoryTabs categories={categories} selected={selectedCategory} onSelect={setSelectedCategory} />
@@ -83,6 +90,8 @@ export default function Home() {
             <ProductGrid products={products} onAdd={handleAdd} addingSku={addingSku} />
           )}
         </main>
+
+        <ChatPanel onCartChanged={refreshCart} />
 
         <CartSidebar cart={cart} onRemove={handleRemove} removingId={removingId} />
       </div>

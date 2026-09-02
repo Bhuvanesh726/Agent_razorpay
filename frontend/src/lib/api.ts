@@ -1,12 +1,15 @@
-import type { Cart, Category, ProductListResponse } from "./types";
+import type { AgentChatResponse, AuditEvent, Cart, Category, ProductListResponse } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8842";
 
 const REQUEST_TIMEOUT_MS = 8000;
+// The agent loop can make several sequential model calls (with retries/fallback)
+// before responding — a plain product/cart request has no reason to take this long.
+const AGENT_REQUEST_TIMEOUT_MS = 120_000;
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   let res: Response;
   try {
@@ -68,4 +71,31 @@ export function addCartItem(sku: string, quantity = 1): Promise<Cart> {
 
 export function removeCartItem(itemId: number): Promise<Cart> {
   return request<Cart>(`/api/cart/items/${itemId}`, { method: "DELETE" });
+}
+
+export function sendAgentMessage(
+  sessionId: string,
+  message: string,
+  budgetPaise?: number | null
+): Promise<AgentChatResponse> {
+  return request<AgentChatResponse>(
+    "/api/agent/chat",
+    {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId, message, budget_paise: budgetPaise ?? null }),
+    },
+    AGENT_REQUEST_TIMEOUT_MS
+  );
+}
+
+export function confirmPendingAction(sessionId: string, approve: boolean): Promise<AgentChatResponse> {
+  return request<AgentChatResponse>(
+    "/api/agent/confirm",
+    { method: "POST", body: JSON.stringify({ session_id: sessionId, approve }) },
+    AGENT_REQUEST_TIMEOUT_MS
+  );
+}
+
+export function fetchAuditTrail(sessionId: string): Promise<AuditEvent[]> {
+  return request<AuditEvent[]>(`/api/audit/${sessionId}`);
 }

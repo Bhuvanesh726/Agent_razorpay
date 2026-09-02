@@ -14,6 +14,23 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     database_url: str = "sqlite:///./razorpay_agent.db"
 
+    # --- Layer 1: agent + policy engine ---
+    nvidia_api_key: str = ""
+    llm_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    llm_fallback: str = "openai/gpt-oss-120b"
+    llm_timeout_seconds: float = 30.0
+    llm_max_retries: int = 2
+    llm_retry_backoff_seconds: float = 1.0
+
+    agent_max_iterations: int = 8
+
+    # Policy thresholds. All in paise; all overridable via env, all with a
+    # sane default so the system is never unbounded even if unconfigured.
+    policy_default_spend_cap_paise: int = 500_000  # ₹5,000 — used only when a session sets no budget_paise
+    policy_per_item_max_paise: int = 300_000  # ₹3,000 — no single catalog item is denied by default
+    policy_quantity_max: int = 10
+    policy_confirmation_threshold_paise: int = 100_000  # ₹1,000
+
     model_config = SettingsConfigDict(
         env_file=_REPO_ROOT / ".env",
         env_file_encoding="utf-8",
