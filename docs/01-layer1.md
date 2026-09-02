@@ -123,7 +123,13 @@ real, not theoretical.
 
 Every call logs (structured JSON, via the existing Layer 0 logging
 middleware): model id, attempt number, latency, tool-call count, token
-counts, and outcome.
+counts, cost, and outcome. Token counts (`prompt_tokens`/`completion_tokens`/
+`total_tokens`) come straight from the OpenAI-compatible response's `usage`
+object — Agno's `MessageMetrics` parses that 1:1, so the gateway reads it
+from there rather than re-parsing the raw response. `cost_paise =
+total_tokens * LLM_COST_PAISE_PER_TOKEN` (default `0.0` — NVIDIA's current
+tier is free); the plumbing is real today, so the number becomes real the
+day the rate isn't zero, with no code changes.
 
 ## Audit log
 
@@ -142,7 +148,7 @@ whatever happens later in the same request.
 |---|---|---|
 | POST | `/api/agent/chat` | `{session_id, message, budget_paise?}` → reply, cart, policy status |
 | POST | `/api/agent/confirm` | `{session_id, approve}` → resolves a pending action, resumes the loop |
-| GET | `/api/audit/{session_id}` | full event trail, in order |
+| GET | `/api/audit/{session_id}` | `{session_id, events, totals}` — full event trail in order, plus session totals (model calls, prompt/completion/total tokens, cost, fallback-used count) computed from the `model_call` events |
 
 ## Frontend
 
@@ -166,8 +172,12 @@ table inline, so the policy decisions are visible without opening devtools.
   stubbed (scripted responses, no network calls): hallucinated SKU denied,
   spend cap denied, an allowed add actually lands in the cart, and the full
   confirm/resume round-trip.
+- `test_gateway_cost.py` — `cost_paise` arithmetic (zero by default, scales
+  with the configured rate, rounds correctly, `None` when tokens unknown).
+- `test_audit_append_only.py` also covers `compute_totals`: aggregates only
+  `model_call` events, ignores everything else in the trail.
 
-All 29 tests run in under 3 seconds with no network access.
+All 36 tests run in under 3 seconds with no network access.
 
 ## Verified live (real NVIDIA NIM calls, real browser)
 
@@ -195,9 +205,9 @@ Everything else (timeouts, retries, policy thresholds, max iterations) has a
 default in `app/core/config.py` and can be overridden via env vars — nothing
 is hardcoded inline. See that file for the full list
 (`LLM_TIMEOUT_SECONDS`, `LLM_MAX_RETRIES`, `LLM_RETRY_BACKOFF_SECONDS`,
-`AGENT_MAX_ITERATIONS`, `POLICY_DEFAULT_SPEND_CAP_PAISE`,
-`POLICY_PER_ITEM_MAX_PAISE`, `POLICY_QUANTITY_MAX`,
-`POLICY_CONFIRMATION_THRESHOLD_PAISE`).
+`LLM_COST_PAISE_PER_TOKEN`, `AGENT_MAX_ITERATIONS`,
+`POLICY_DEFAULT_SPEND_CAP_PAISE`, `POLICY_PER_ITEM_MAX_PAISE`,
+`POLICY_QUANTITY_MAX`, `POLICY_CONFIRMATION_THRESHOLD_PAISE`).
 
 ## How to run it (PowerShell)
 

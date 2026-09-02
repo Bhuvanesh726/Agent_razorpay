@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -32,3 +32,14 @@ class AuditEvent(Base):
     model_used: Mapped[str | None] = mapped_column(String(80), nullable=True)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Populated on "model_call" events only, straight from the OpenAI-compatible
+    # response's `usage` object (via the LLM gateway). cost_paise = total_tokens
+    # * a configured per-token rate (0 by default — NVIDIA's current tier is free).
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cost_paise: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Recorded at write time rather than re-derived from current config later,
+    # so a config change never reinterprets historical audit rows.
+    fallback_used: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

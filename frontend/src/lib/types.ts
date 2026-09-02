@@ -81,4 +81,24 @@ export interface AuditEvent {
   model_used: string | null;
   latency_ms: number | null;
   request_id: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  cost_paise: number | null;
+  fallback_used: boolean | null;
+}
+
+export interface AuditTotals {
+  total_model_calls: number;
+  total_prompt_tokens: number;
+  total_completion_tokens: number;
+  total_tokens: number;
+  total_cost_paise: number;
+  fallback_used_count: number;
+}
+
+export interface AuditTrail {
+  session_id: string;
+  events: AuditEvent[];
+  totals: AuditTotals;
 }

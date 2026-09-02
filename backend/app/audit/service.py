@@ -27,6 +27,11 @@ class AuditService:
         model_used: str | None = None,
         latency_ms: int | None = None,
         request_id: str | None = None,
+        prompt_tokens: int | None = None,
+        completion_tokens: int | None = None,
+        total_tokens: int | None = None,
+        cost_paise: int | None = None,
+        fallback_used: bool | None = None,
     ) -> AuditEvent:
         event = AuditEvent(
             session_id=session_id,
@@ -41,6 +46,11 @@ class AuditService:
             model_used=model_used,
             latency_ms=latency_ms,
             request_id=request_id,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            cost_paise=cost_paise,
+            fallback_used=fallback_used,
         )
         _repo.create(db, event)
         db.commit()
@@ -49,3 +59,15 @@ class AuditService:
 
     def get_trail(self, db: Session, session_id: str) -> list[AuditEvent]:
         return _repo.list_for_session(db, session_id)
+
+    def compute_totals(self, events: list[AuditEvent]) -> dict:
+        """Pure aggregation over an already-fetched trail — no DB access."""
+        model_calls = [e for e in events if e.event_type == "model_call"]
+        return {
+            "total_model_calls": len(model_calls),
+            "total_prompt_tokens": sum(e.prompt_tokens or 0 for e in model_calls),
+            "total_completion_tokens": sum(e.completion_tokens or 0 for e in model_calls),
+            "total_tokens": sum(e.total_tokens or 0 for e in model_calls),
+            "total_cost_paise": sum(e.cost_paise or 0 for e in model_calls),
+            "fallback_used_count": sum(1 for e in model_calls if e.fallback_used),
+        }

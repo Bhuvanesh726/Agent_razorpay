@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { confirmPendingAction, fetchAuditTrail, sendAgentMessage } from "@/lib/api";
-import type { AuditEvent, ChatMessage, PendingAction } from "@/lib/types";
+import type { AuditTrail, ChatMessage, PendingAction } from "@/lib/types";
 
 interface Props {
   onCartChanged: () => void;
@@ -40,7 +40,7 @@ export default function ChatPanel({ onCartChanged }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAudit, setShowAudit] = useState(false);
-  const [auditTrail, setAuditTrail] = useState<AuditEvent[]>([]);
+  const [auditTrail, setAuditTrail] = useState<AuditTrail | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -207,52 +207,71 @@ export default function ChatPanel({ onCartChanged }: Props) {
       </div>
 
       {showAudit && (
-        <div className="mt-2 max-h-64 overflow-y-auto rounded-md border border-gray-200 text-xs">
+        <div className="mt-2 flex flex-col gap-2">
           {auditLoading ? (
-            <p className="p-2 text-gray-400">Loading…</p>
-          ) : auditTrail.length === 0 ? (
-            <p className="p-2 text-gray-400">No events yet for this session.</p>
+            <p className="p-2 text-xs text-gray-400">Loading…</p>
+          ) : !auditTrail || auditTrail.events.length === 0 ? (
+            <p className="p-2 text-xs text-gray-400">No events yet for this session.</p>
           ) : (
-            <table className="w-full border-collapse">
-              <thead className="sticky top-0 bg-gray-50 text-left text-gray-500">
-                <tr>
-                  <th className="p-1.5">Event</th>
-                  <th className="p-1.5">Actor</th>
-                  <th className="p-1.5">Tool</th>
-                  <th className="p-1.5">Decision</th>
-                  <th className="p-1.5">Rule</th>
-                  <th className="p-1.5">Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {auditTrail.map((e) => (
-                  <tr key={e.id} className="border-t border-gray-100 align-top">
-                    <td className="p-1.5 whitespace-nowrap">{e.event_type}</td>
-                    <td className="p-1.5 whitespace-nowrap">{e.actor}</td>
-                    <td className="p-1.5 whitespace-nowrap">{e.tool_name ?? "—"}</td>
-                    <td className="p-1.5 whitespace-nowrap">
-                      {e.decision ? (
-                        <span
-                          className={
-                            e.decision === "DENY"
-                              ? "text-red-600"
-                              : e.decision === "REQUIRE_CONFIRMATION"
-                                ? "text-amber-600"
-                                : "text-green-600"
-                          }
-                        >
-                          {e.decision}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="p-1.5 whitespace-nowrap">{e.rule_name ?? "—"}</td>
-                    <td className="p-1.5">{e.reason ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <>
+              <div className="grid grid-cols-2 gap-1.5 rounded-md border border-gray-200 bg-gray-50 p-2 text-xs text-gray-600 sm:grid-cols-3">
+                <span>Model calls: {auditTrail.totals.total_model_calls}</span>
+                <span>Fallback used: {auditTrail.totals.fallback_used_count}</span>
+                <span>Tokens: {auditTrail.totals.total_tokens}</span>
+                <span>Prompt tokens: {auditTrail.totals.total_prompt_tokens}</span>
+                <span>Completion tokens: {auditTrail.totals.total_completion_tokens}</span>
+                <span>Cost: ₹{(auditTrail.totals.total_cost_paise / 100).toFixed(2)}</span>
+              </div>
+
+              <div className="max-h-64 overflow-y-auto rounded-md border border-gray-200 text-xs">
+                <table className="w-full border-collapse">
+                  <thead className="sticky top-0 bg-gray-50 text-left text-gray-500">
+                    <tr>
+                      <th className="p-1.5">Event</th>
+                      <th className="p-1.5">Actor</th>
+                      <th className="p-1.5">Tool</th>
+                      <th className="p-1.5">Decision</th>
+                      <th className="p-1.5">Rule</th>
+                      <th className="p-1.5">Tokens / Cost</th>
+                      <th className="p-1.5">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditTrail.events.map((e) => (
+                      <tr key={e.id} className="border-t border-gray-100 align-top">
+                        <td className="p-1.5 whitespace-nowrap">{e.event_type}</td>
+                        <td className="p-1.5 whitespace-nowrap">{e.actor}</td>
+                        <td className="p-1.5 whitespace-nowrap">{e.tool_name ?? "—"}</td>
+                        <td className="p-1.5 whitespace-nowrap">
+                          {e.decision ? (
+                            <span
+                              className={
+                                e.decision === "DENY"
+                                  ? "text-red-600"
+                                  : e.decision === "REQUIRE_CONFIRMATION"
+                                    ? "text-amber-600"
+                                    : "text-green-600"
+                              }
+                            >
+                              {e.decision}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="p-1.5 whitespace-nowrap">{e.rule_name ?? "—"}</td>
+                        <td className="p-1.5 whitespace-nowrap">
+                          {e.total_tokens != null
+                            ? `${e.total_tokens} tok · ₹${((e.cost_paise ?? 0) / 100).toFixed(2)}${e.fallback_used ? " (fallback)" : ""}`
+                            : "—"}
+                        </td>
+                        <td className="p-1.5">{e.reason ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
     llm_max_retries: int = 2
     llm_retry_backoff_seconds: float = 1.0
+    # paise per token. Default 0 — NVIDIA's current tier is free. cost_paise
+    # on every audit event is computed from this, so it's real the day the
+    # rate isn't zero, with no code changes.
+    llm_cost_paise_per_token: float = 0.0
 
     agent_max_iterations: int = 8
 

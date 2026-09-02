@@ -204,6 +204,11 @@ def _run_loop(db: Session, session, request_id: str | None) -> HarnessResult:
             latency_ms=gw_result.latency_ms,
             reason=f"fallback_used={gw_result.fallback_used}",
             request_id=request_id,
+            prompt_tokens=gw_result.prompt_tokens,
+            completion_tokens=gw_result.completion_tokens,
+            total_tokens=gw_result.total_tokens,
+            cost_paise=gw_result.cost_paise,
+            fallback_used=gw_result.fallback_used,
         )
 
         if not gw_result.tool_calls:

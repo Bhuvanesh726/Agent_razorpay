@@ -42,8 +42,16 @@ class GatewayResult:
     model_used: str
     fallback_used: bool
     latency_ms: int
-    input_tokens: int | None = None
-    output_tokens: int | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    cost_paise: int | None = None
+
+
+def _compute_cost_paise(total_tokens: int | None) -> int | None:
+    if total_tokens is None:
+        return None
+    return round(total_tokens * settings.llm_cost_paise_per_token)
 
 
 def _to_agno_messages(messages: list[dict]) -> list[Message]:
@@ -144,6 +152,14 @@ class LLMGateway:
                 for tc in (model_response.tool_calls or [])
             ]
             usage = model_response.response_usage
+            # Agno's MessageMetrics.input_tokens/output_tokens/total_tokens are
+            # parsed 1:1 from the raw OpenAI-compatible response's `usage` object
+            # (usage.prompt_tokens/completion_tokens/total_tokens) — see
+            # agno.models.openai.chat.OpenAIChat._get_metrics.
+            prompt_tokens = getattr(usage, "input_tokens", None)
+            completion_tokens = getattr(usage, "output_tokens", None)
+            total_tokens = getattr(usage, "total_tokens", None)
+            cost_paise = _compute_cost_paise(total_tokens)
             logger.info(
                 "model call succeeded",
                 extra={
@@ -152,8 +168,10 @@ class LLMGateway:
                     "latency_ms": latency_ms,
                     "tool_call_count": len(tool_calls),
                     "fallback_used": fallback_used,
-                    "input_tokens": getattr(usage, "input_tokens", None),
-                    "output_tokens": getattr(usage, "output_tokens", None),
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "cost_paise": cost_paise,
                     "outcome": "success",
                 },
             )
@@ -163,8 +181,10 @@ class LLMGateway:
                 model_used=model.id,
                 fallback_used=fallback_used,
                 latency_ms=latency_ms,
-                input_tokens=getattr(usage, "input_tokens", None),
-                output_tokens=getattr(usage, "output_tokens", None),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                cost_paise=cost_paise,
             )
 
         raise GatewayError(f"exhausted {max_attempts} attempts on {model.id}: {last_error}")

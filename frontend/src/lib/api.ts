@@ -1,4 +1,4 @@
-import type { AgentChatResponse, AuditEvent, Cart, Category, ProductListResponse } from "./types";
+import type { AgentChatResponse, AuditTrail, Cart, Category, ProductListResponse } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8842";
 
@@ -96,6 +96,6 @@ export function confirmPendingAction(sessionId: string, approve: boolean): Promi
   );
 }
 
-export function fetchAuditTrail(sessionId: string): Promise<AuditEvent[]> {
-  return request<AuditEvent[]>(`/api/audit/${sessionId}`);
+export function fetchAuditTrail(sessionId: string): Promise<AuditTrail> {
+  return request<AuditTrail>(`/api/audit/${sessionId}`);
 }

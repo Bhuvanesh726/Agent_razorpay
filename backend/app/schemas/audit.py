@@ -20,3 +20,23 @@ class AuditEventOut(BaseModel):
     model_used: str | None = None
     latency_ms: int | None = None
     request_id: str | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    cost_paise: int | None = None
+    fallback_used: bool | None = None
+
+
+class AuditTotalsOut(BaseModel):
+    total_model_calls: int
+    total_prompt_tokens: int
+    total_completion_tokens: int
+    total_tokens: int
+    total_cost_paise: int
+    fallback_used_count: int
+
+
+class AuditTrailOut(BaseModel):
+    session_id: str
+    events: list[AuditEventOut]
+    totals: AuditTotalsOut
