@@ -67,11 +67,16 @@ export default function Home() {
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold">Razorpay Shop</h1>
-        <p className="text-sm text-gray-500">
-          Layer 1 — browse and add manually, or ask the assistant. Every money action it takes is policy-gated and logged.
-        </p>
+      <header className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Razorpay Shop</h1>
+          <p className="text-sm text-gray-500">
+            Browse and add manually, or ask the assistant. Every money action it takes is policy-gated and logged.
+          </p>
+        </div>
+        <a href="/audit" className="text-sm text-gray-500 underline hover:text-gray-800">
+          Audit trail viewer →
+        </a>
       </header>
 
       {error && (

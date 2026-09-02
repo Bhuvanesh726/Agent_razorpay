@@ -171,6 +171,7 @@ def handle_confirm(
         actor="agent",
         tool_name=tool_name,
         tool_args=arguments,
+        tool_result=result,
         decision="ALLOW",
         reason="Executed after explicit user confirmation.",
         request_id=request_id,
@@ -394,6 +395,7 @@ def _handle_tool_call(db: Session, session, tc: GatewayToolCall, request_id: str
         actor="agent",
         tool_name=tc.name,
         tool_args=args,
+        tool_result=result,
         decision="ALLOW",
         request_id=request_id,
     )

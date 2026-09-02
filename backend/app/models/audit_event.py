@@ -23,6 +23,12 @@ class AuditEvent(Base):
 
     tool_name: Mapped[str | None] = mapped_column(String(60), nullable=True)
     tool_args: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # The tool's actual return value, populated on "tool_executed" events.
+    # Without this, replay can only know what was *asked* for, never what
+    # actually happened — e.g. add_to_cart's args say a sku+quantity, but
+    # reconstructing the resulting cart total needs the price it was
+    # executed at, which only the result (not the args) carries.
+    tool_result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # "ALLOW" | "DENY" | "REQUIRE_CONFIRMATION" | null
     decision: Mapped[str | None] = mapped_column(String(30), nullable=True)

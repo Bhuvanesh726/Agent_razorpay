@@ -14,6 +14,7 @@ class AuditEventOut(BaseModel):
     actor: str
     tool_name: str | None = None
     tool_args: dict | None = None
+    tool_result: dict | None = None
     decision: str | None = None
     rule_name: str | None = None
     reason: str | None = None
@@ -40,3 +41,11 @@ class AuditTrailOut(BaseModel):
     session_id: str
     events: list[AuditEventOut]
     totals: AuditTotalsOut
+
+
+class SessionReplayOut(BaseModel):
+    session_id: str
+    event_count: int
+    narrative: list[str]
+    final_cart: dict | None
+    final_order_status: str | None

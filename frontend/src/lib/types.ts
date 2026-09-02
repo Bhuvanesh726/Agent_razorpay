@@ -94,6 +94,7 @@ export interface AuditEvent {
   actor: "user" | "agent" | "policy" | "system";
   tool_name: string | null;
   tool_args: Record<string, unknown> | null;
+  tool_result: Record<string, unknown> | null;
   decision: "ALLOW" | "DENY" | "REQUIRE_CONFIRMATION" | null;
   rule_name: string | null;
   reason: string | null;
@@ -120,4 +121,12 @@ export interface AuditTrail {
   session_id: string;
   events: AuditEvent[];
   totals: AuditTotals;
+}
+
+export interface SessionReplay {
+  session_id: string;
+  event_count: number;
+  narrative: string[];
+  final_cart: Cart | null;
+  final_order_status: string | null;
 }
