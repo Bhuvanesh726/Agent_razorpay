@@ -7,6 +7,7 @@ SDK client and to verify signatures, and is never included in any return
 value, log line, or exception message.
 """
 
+import requests
 from dataclasses import dataclass
 
 import razorpay
@@ -14,6 +15,7 @@ from razorpay.errors import BadRequestError, GatewayError as RazorpaySDKGatewayE
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.testing.chaos import ChaosFault, is_active
 
 
 class PaymentGatewayError(Exception):
@@ -35,9 +37,10 @@ class RazorpayOrder:
 
 
 class RazorpayGateway:
-    def __init__(self, key_id: str, key_secret: str):
+    def __init__(self, key_id: str, key_secret: str, timeout_seconds: float):
         self._key_id = key_id
         self._client = razorpay.Client(auth=(key_id, key_secret))
+        self._timeout_seconds = timeout_seconds
 
     @property
     def public_key_id(self) -> str:
@@ -45,6 +48,10 @@ class RazorpayGateway:
         return self._key_id
 
     def create_order(self, amount_paise: int, currency: str, receipt: str) -> RazorpayOrder:
+        if is_active(ChaosFault.RAZORPAY_TIMEOUT):
+            logger.warning("chaos: simulating a Razorpay order-creation timeout", extra={"receipt": receipt})
+            raise PaymentGatewayError("Chaos: simulated Razorpay timeout — the payment API hung", category="server_error")
+
         try:
             response = self._client.order.create(
                 {
@@ -52,7 +59,8 @@ class RazorpayGateway:
                     "currency": currency,
                     "receipt": receipt,
                     "payment_capture": 1,
-                }
+                },
+                timeout=self._timeout_seconds,
             )
         except BadRequestError as e:
             logger.error("razorpay order creation rejected", extra={"receipt": receipt, "error": str(e)})
@@ -60,6 +68,9 @@ class RazorpayGateway:
         except (ServerError, RazorpaySDKGatewayError) as e:
             logger.error("razorpay order creation failed (server-side)", extra={"receipt": receipt, "error": str(e)})
             raise PaymentGatewayError(f"Razorpay server error: {e}", category="server_error") from e
+        except requests.exceptions.Timeout as e:
+            logger.error("razorpay order creation timed out", extra={"receipt": receipt, "error": str(e)})
+            raise PaymentGatewayError(f"Razorpay did not respond within {self._timeout_seconds}s: {e}", category="server_error") from e
         except Exception as e:
             logger.error("razorpay order creation failed (network/unexpected)", extra={"receipt": receipt, "error": str(e)})
             raise PaymentGatewayError(f"Could not reach Razorpay: {e}", category="server_error") from e
@@ -75,6 +86,13 @@ class RazorpayGateway:
         """Never trust a frontend claim of success — this HMAC check is what
         actually decides. Returns False on any mismatch or malformed input;
         never raises."""
+        if is_active(ChaosFault.TAMPERED_SIGNATURE):
+            logger.warning(
+                "chaos: forcing signature verification to fail",
+                extra={"razorpay_order_id": razorpay_order_id, "razorpay_payment_id": razorpay_payment_id},
+            )
+            return False
+
         try:
             self._client.utility.verify_payment_signature(
                 {
@@ -91,4 +109,8 @@ class RazorpayGateway:
             return False
 
 
-gateway = RazorpayGateway(key_id=settings.razorpay_key_id, key_secret=settings.razorpay_key_secret)
+gateway = RazorpayGateway(
+    key_id=settings.razorpay_key_id,
+    key_secret=settings.razorpay_key_secret,
+    timeout_seconds=settings.razorpay_timeout_seconds,
+)

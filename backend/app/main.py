@@ -4,12 +4,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logging import RequestLoggingMiddleware, configure_logging
 from app.routers import agent, audit, cart, health, payments, products
+from app.testing.chaos import ChaosHeaderMiddleware
 
 configure_logging()
 
 app = FastAPI(title=settings.app_name)
 
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(ChaosHeaderMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

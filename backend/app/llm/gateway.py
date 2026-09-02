@@ -10,8 +10,15 @@ Agno's own agentic loop (`Agent.run()` / `Model.response()`) is deliberately
 NOT used — it auto-executes tool calls, which would bypass the policy gate.
 `Model.invoke()` is the lower-level primitive: one call in, one proposed
 response out, nothing executed. The harness stays in full control.
+
+Two resilience mechanisms live here, each with its own reason:
+- Retry + fallback (Layer 1): a single flaky call shouldn't fail the request.
+- Circuit breaker (Layer 3): repeated failures shouldn't keep paying the
+  full retry+timeout cost on every single request while a model is down —
+  after enough consecutive failures, fail fast for a cooldown window instead.
 """
 
+import json
 import time
 from dataclasses import dataclass
 
@@ -19,9 +26,12 @@ from agno.exceptions import ModelAuthenticationError, ModelProviderError
 from agno.metrics import MessageMetrics
 from agno.models.message import Message
 from agno.models.nvidia import Nvidia
+from agno.models.response import ModelResponse
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.llm.circuit_breaker import CircuitBreaker
+from app.testing.chaos import ChaosFault, is_active
 
 
 class GatewayError(Exception):
@@ -73,6 +83,41 @@ def _is_retryable(error: ModelProviderError) -> bool:
     return status == 429 or status >= 500
 
 
+def _chaos_model_response() -> ModelResponse | None:
+    """Returns a synthetic 'successful' model response standing in for the
+    real API call, or None if no relevant fault is active. These bypass the
+    real call entirely (deterministic, no network) but flow through the
+    exact same downstream parsing as a real response — the harness can't
+    tell the difference, which is the point: it exercises the real
+    malformed-tool-call / hallucinated-SKU handling paths."""
+    if is_active(ChaosFault.LLM_MALFORMED_TOOL_CALL):
+        return ModelResponse(
+            content=None,
+            tool_calls=[
+                {
+                    "id": "chaos-malformed",
+                    "type": "function",
+                    "function": {"name": "add_to_cart", "arguments": '{"sku": "PET-001", "quantity": '},
+                }
+            ],
+        )
+    if is_active(ChaosFault.HALLUCINATE_SKU):
+        return ModelResponse(
+            content=None,
+            tool_calls=[
+                {
+                    "id": "chaos-hallucinate",
+                    "type": "function",
+                    "function": {
+                        "name": "add_to_cart",
+                        "arguments": json.dumps({"sku": "CHAOS-FAKE-SKU-999", "quantity": 1}),
+                    },
+                }
+            ],
+        )
+    return None
+
+
 class LLMGateway:
     def __init__(
         self,
@@ -82,6 +127,8 @@ class LLMGateway:
         timeout_seconds: float,
         max_retries: int,
         backoff_base_seconds: float,
+        circuit_breaker_failure_threshold: int,
+        circuit_breaker_cooldown_seconds: float,
     ):
         self._primary_id = primary_model_id
         self._fallback_id = fallback_model_id
@@ -89,18 +136,46 @@ class LLMGateway:
         self._backoff_base = backoff_base_seconds
         self._primary = Nvidia(id=primary_model_id, api_key=api_key, timeout=timeout_seconds, max_retries=0)
         self._fallback = Nvidia(id=fallback_model_id, api_key=api_key, timeout=timeout_seconds, max_retries=0)
+        self._primary_breaker = CircuitBreaker(circuit_breaker_failure_threshold, circuit_breaker_cooldown_seconds)
+        self._fallback_breaker = CircuitBreaker(circuit_breaker_failure_threshold, circuit_breaker_cooldown_seconds)
 
     def call(self, messages: list[dict], tools: list[dict]) -> GatewayResult:
         agno_messages = _to_agno_messages(messages)
 
-        try:
-            return self._call_with_retries(self._primary, agno_messages, tools, fallback_used=False)
-        except GatewayError as primary_error:
+        if not self._primary_breaker.is_open():
+            try:
+                result = self._call_with_retries(self._primary, agno_messages, tools, fallback_used=False)
+                self._primary_breaker.record_success()
+                return result
+            except GatewayError as primary_error:
+                self._primary_breaker.record_failure()
+                logger.warning(
+                    "primary model exhausted, falling back",
+                    extra={"primary_model": self._primary_id, "fallback_model": self._fallback_id, "error": str(primary_error)},
+                )
+        else:
             logger.warning(
-                "primary model exhausted, falling back",
-                extra={"primary_model": self._primary_id, "fallback_model": self._fallback_id, "error": str(primary_error)},
+                "primary model circuit breaker open, skipping straight to fallback",
+                extra={"primary_model": self._primary_id, "consecutive_failures": self._primary_breaker.consecutive_failures},
             )
-            return self._call_with_retries(self._fallback, agno_messages, tools, fallback_used=True)
+
+        if self._fallback_breaker.is_open():
+            logger.error(
+                "fallback model circuit breaker also open, failing fast",
+                extra={"fallback_model": self._fallback_id, "consecutive_failures": self._fallback_breaker.consecutive_failures},
+            )
+            raise GatewayError(
+                f"Both models are circuit-broken after repeated failures — failing fast without "
+                f"attempting a call. Will retry automatically after the cooldown window."
+            )
+
+        try:
+            result = self._call_with_retries(self._fallback, agno_messages, tools, fallback_used=True)
+            self._fallback_breaker.record_success()
+            return result
+        except GatewayError:
+            self._fallback_breaker.record_failure()
+            raise
 
     def _call_with_retries(
         self, model: Nvidia, messages: list[Message], tools: list[dict], *, fallback_used: bool
@@ -114,7 +189,19 @@ class LLMGateway:
             start = time.monotonic()
 
             try:
-                model_response = model.invoke(list(messages), assistant_message, tools=tools)
+                chaos_response = _chaos_model_response()
+                if chaos_response is not None:
+                    model_response = chaos_response
+                elif is_active(ChaosFault.SLOW_LLM):
+                    # Stands in for a real timeout: same exception type and
+                    # status class a genuine gateway timeout would raise, so
+                    # it flows through the identical retry/backoff/fallback
+                    # path below rather than a special case.
+                    raise ModelProviderError(
+                        message="Chaos: simulated LLM timeout", status_code=504, model_name=model.name, model_id=model.id
+                    )
+                else:
+                    model_response = model.invoke(list(messages), assistant_message, tools=tools)
             except ModelAuthenticationError as e:
                 logger.error(
                     "model call failed: authentication error (not retryable)",
@@ -197,4 +284,6 @@ gateway = LLMGateway(
     timeout_seconds=settings.llm_timeout_seconds,
     max_retries=settings.llm_max_retries,
     backoff_base_seconds=settings.llm_retry_backoff_seconds,
+    circuit_breaker_failure_threshold=settings.llm_circuit_breaker_failure_threshold,
+    circuit_breaker_cooldown_seconds=settings.llm_circuit_breaker_cooldown_seconds,
 )

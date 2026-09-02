@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
     razorpay_currency: str = "INR"
+    razorpay_timeout_seconds: float = 10.0
 
     # Policy thresholds. All in paise; all overridable via env, all with a
     # sane default so the system is never unbounded even if unconfigured.
@@ -39,6 +40,15 @@ class Settings(BaseSettings):
     policy_per_item_max_paise: int = 300_000  # ₹3,000 — no single catalog item is denied by default
     policy_quantity_max: int = 10
     policy_confirmation_threshold_paise: int = 100_000  # ₹1,000
+
+    # --- Layer 3: chaos injection + resilience ---
+    # A global, sticky fault for a demo segment (e.g. CHAOS_FAULT=SLOW_LLM).
+    # Empty = off. Overridable per-request via the X-Chaos-Fault header.
+    # Both are gated by app_env == "development" in app/testing/chaos.py —
+    # there is no way to enable chaos from a production config.
+    chaos_fault: str = ""
+    llm_circuit_breaker_failure_threshold: int = 3
+    llm_circuit_breaker_cooldown_seconds: float = 30.0
 
     model_config = SettingsConfigDict(
         env_file=_REPO_ROOT / ".env",

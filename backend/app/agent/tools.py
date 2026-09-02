@@ -13,6 +13,7 @@ never runs one directly.
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.agent.injection_detection import scan_for_injection
 from app.audit.service import AuditService
 from app.orders import service as order_service
 from app.orders.state_machine import OrderStatus
@@ -20,12 +21,31 @@ from app.payments.gateway import PaymentGatewayError, gateway as payment_gateway
 from app.repositories import cart_repo
 from app.schemas.cart import CartItemCreate
 from app.services import cart_service, product_service
+from app.testing.chaos import ChaosFault, is_active, log_injection
 
 _audit = AuditService()
 
 
+def _flag_if_injection(db: Session, user_id: str, session_id: str, tool_name: str, sku: str, text: str | None) -> None:
+    match = scan_for_injection(text)
+    if match is None:
+        return
+    _audit.log_event(
+        db,
+        session_id=session_id,
+        user_id=user_id,
+        event_type="injection_detected",
+        actor="system",
+        tool_name=tool_name,
+        tool_args={"sku": sku, "matched": match},
+        reason=f"Suspicious instruction-like text found in catalog data for SKU '{sku}': {match!r}. "
+        "Treated as inert data — tool results are never spliced into the system prompt, and the "
+        "policy engine re-checks any resulting action regardless of what the model does with it.",
+    )
+
+
 def search_products(
-    db: Session, query: str = "", max_price_paise: int | None = None, category: str | None = None
+    db: Session, user_id: str = "", session_id: str = "", query: str = "", max_price_paise: int | None = None, category: str | None = None
 ) -> dict:
     result = product_service.list_products(
         db,
@@ -36,6 +56,8 @@ def search_products(
         page=1,
         page_size=20,
     )
+    for p in result.items:
+        _flag_if_injection(db, user_id, session_id, "search_products", p.sku, p.description)
     return {
         "total": result.total,
         "items": [
@@ -47,17 +69,19 @@ def search_products(
                 "price_paise": p.price_paise,
                 "price_display": p.price_display,
                 "stock": p.stock,
+                "description": p.description,
             }
             for p in result.items
         ],
     }
 
 
-def get_product(db: Session, sku: str) -> dict:
+def get_product(db: Session, user_id: str, session_id: str, sku: str) -> dict:
     try:
         product = product_service.get_product_by_sku(db, sku)
     except HTTPException:
         return {"error": f"SKU '{sku}' was not found in the catalog."}
+    _flag_if_injection(db, user_id, session_id, "get_product", product.sku, product.description)
     return {
         "sku": product.sku,
         "name": product.name,
@@ -160,6 +184,34 @@ def initiate_payment(db: Session, user_id: str, session_id: str) -> dict:
             reason=f"Razorpay order {order.razorpay_order_id} created for order {order.id}.",
         )
 
+    if is_active(ChaosFault.FAIL_PAYMENT):
+        # Stands in for the bank declining the card during Checkout — order
+        # creation succeeded, but the payment attempt itself is refused.
+        # Injected here (rather than faking a Checkout round-trip) so this
+        # fault is demoable from chat alone, no browser interaction needed.
+        log_injection(
+            db,
+            session_id=session_id,
+            user_id=user_id,
+            fault=ChaosFault.FAIL_PAYMENT,
+            detail=f"Forcing order {order.id} to a declined payment instead of returning checkout params.",
+        )
+        order_service.mark_failed(
+            db,
+            order,
+            error_code="chaos_injected_decline",
+            error_description="Chaos: simulated Razorpay decline",
+        )
+        _audit.log_event(
+            db,
+            session_id=session_id,
+            user_id=user_id,
+            event_type="payment_failed",
+            actor="system",
+            reason="Chaos: simulated Razorpay decline",
+        )
+        return {"error": "Payment declined. You can ask to pay again to retry.", "order_id": order.id, "status": "FAILED"}
+
     return {
         "order_id": order.id,
         "razorpay_order_id": order.razorpay_order_id,
@@ -173,8 +225,8 @@ def initiate_payment(db: Session, user_id: str, session_id: str) -> dict:
 # Uniform dispatch signature: fn(db, user_id, session_id, **arguments) -> dict.
 # Tools that don't need user_id/session_id still accept them for a uniform call site.
 TOOL_FUNCTIONS = {
-    "search_products": lambda db, user_id, session_id, **kw: search_products(db, **kw),
-    "get_product": lambda db, user_id, session_id, **kw: get_product(db, **kw),
+    "search_products": lambda db, user_id, session_id, **kw: search_products(db, user_id, session_id, **kw),
+    "get_product": lambda db, user_id, session_id, **kw: get_product(db, user_id, session_id, **kw),
     "add_to_cart": lambda db, user_id, session_id, **kw: add_to_cart(db, user_id, **kw),
     "view_cart": lambda db, user_id, session_id, **kw: view_cart(db, user_id),
     "remove_from_cart": lambda db, user_id, session_id, **kw: remove_from_cart(db, user_id, **kw),

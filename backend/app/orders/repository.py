@@ -7,10 +7,12 @@ what lets two concurrent requests both pass the check and both insert).
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.logging import logger
 from app.models.order import Order, Payment
 from app.orders.state_machine import OrderStatus
+from app.testing.chaos import ChaosFault, is_active
 
 
 def find_by_idempotency_key(db: Session, idempotency_key: str) -> Order | None:
@@ -43,6 +45,9 @@ def get_or_create(
     if existing is not None:
         return existing, False
 
+    if is_active(ChaosFault.DB_CONFLICT):
+        _simulate_concurrent_winner(db, idempotency_key, user_id, session_id, cart_id, amount_paise, currency)
+
     order = Order(
         idempotency_key=idempotency_key,
         user_id=user_id,
@@ -67,6 +72,37 @@ def get_or_create(
 
     db.refresh(order)
     return order, True
+
+
+def _simulate_concurrent_winner(
+    db: Session, idempotency_key: str, user_id: str, session_id: str, cart_id: int, amount_paise: int, currency: str
+) -> None:
+    """Chaos: genuinely inserts a competing row — via a separate, independent
+    session/transaction bound to the *same engine* as the caller's session
+    (not the global default — a test using an isolated in-memory DB must see
+    a real collision too, not silently miss it) — with the same idempotency
+    key right before our own insert attempt below. This makes
+    `get_or_create`'s IntegrityError handling fire for real, against a real
+    UNIQUE constraint violation, exactly as it would for two truly concurrent
+    requests (see tests/test_order_repository_concurrency.py for the
+    un-injected version of this same race)."""
+    side_session = sessionmaker(bind=db.get_bind())()
+    try:
+        side_session.add(
+            Order(
+                idempotency_key=idempotency_key,
+                user_id=user_id,
+                session_id=session_id,
+                cart_id=cart_id,
+                amount_paise=amount_paise,
+                currency=currency,
+                status=OrderStatus.PENDING.value,
+            )
+        )
+        side_session.commit()
+        logger.warning("chaos: injected a competing concurrent order insert", extra={"idempotency_key": idempotency_key})
+    finally:
+        side_session.close()
 
 
 def save(db: Session, order: Order) -> Order:
