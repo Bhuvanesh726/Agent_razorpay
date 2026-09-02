@@ -13,9 +13,15 @@ never runs one directly.
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.audit.service import AuditService
+from app.orders import service as order_service
+from app.orders.state_machine import OrderStatus
+from app.payments.gateway import PaymentGatewayError, gateway as payment_gateway
 from app.repositories import cart_repo
 from app.schemas.cart import CartItemCreate
 from app.services import cart_service, product_service
+
+_audit = AuditService()
 
 
 def search_products(
@@ -83,14 +89,96 @@ def remove_from_cart(db: Session, user_id: str, sku: str) -> dict:
     return updated.model_dump(mode="json")
 
 
-# Uniform dispatch signature: fn(db, user_id, **arguments) -> dict.
-# search_products/get_product ignore user_id but accept it for a uniform call site.
+def initiate_payment(db: Session, user_id: str, session_id: str) -> dict:
+    """Creates (or reuses) the order + Razorpay order for the current cart.
+
+    Idempotent at both levels: the same cart always resolves to the same
+    Order row (DB-unique idempotency key), and an order that already has a
+    razorpay_order_id never gets a second one created for it — so calling
+    this twice in a row (a double confirm-click, a retry) is always safe.
+
+    Only ever reached after the policy engine has said REQUIRE_CONFIRMATION
+    and the user has explicitly confirmed — never a straight ALLOW.
+    """
+    cart = cart_repo.get_or_create_active_cart(db, user_id)
+    if not cart.items:
+        return {"error": "Cart is empty — nothing to pay for."}
+
+    creation = order_service.create_or_get_order(db, user_id=user_id, session_id=session_id, cart=cart)
+    order = creation.order
+
+    if creation.was_duplicate:
+        _audit.log_event(
+            db,
+            session_id=session_id,
+            user_id=user_id,
+            event_type="duplicate_payment_prevented",
+            actor="system",
+            decision="DENY" if OrderStatus(order.status) == OrderStatus.PAID else None,
+            reason=f"Reused existing order {order.id} (status={order.status}) for this idempotency key "
+            "instead of creating a new one.",
+        )
+    else:
+        _audit.log_event(
+            db,
+            session_id=session_id,
+            user_id=user_id,
+            event_type="order_created",
+            actor="system",
+            reason=f"Order {order.id} created for {len(cart.items)} item(s), ₹{order.amount_paise / 100:.2f}.",
+        )
+
+    if OrderStatus(order.status) == OrderStatus.PAID:
+        return {
+            "error": "This exact cart has already been paid for.",
+            "order_id": order.id,
+            "status": order.status,
+        }
+
+    had_razorpay_order = bool(order.razorpay_order_id)
+    try:
+        order = order_service.ensure_razorpay_order(db, order)
+    except PaymentGatewayError as e:
+        _audit.log_event(
+            db,
+            session_id=session_id,
+            user_id=user_id,
+            event_type="razorpay_order_failed",
+            actor="system",
+            decision="FAILED",
+            reason=str(e),
+        )
+        return {"error": f"Could not create the payment order: {e}"}
+
+    if not had_razorpay_order:
+        _audit.log_event(
+            db,
+            session_id=session_id,
+            user_id=user_id,
+            event_type="razorpay_order_created",
+            actor="system",
+            reason=f"Razorpay order {order.razorpay_order_id} created for order {order.id}.",
+        )
+
+    return {
+        "order_id": order.id,
+        "razorpay_order_id": order.razorpay_order_id,
+        "amount_paise": order.amount_paise,
+        "currency": order.currency,
+        "razorpay_key_id": payment_gateway.public_key_id,
+        "status": order.status,
+    }
+
+
+# Uniform dispatch signature: fn(db, user_id, session_id, **arguments) -> dict.
+# Tools that don't need user_id/session_id still accept them for a uniform call site.
 TOOL_FUNCTIONS = {
-    "search_products": lambda db, user_id, **kw: search_products(db, **kw),
-    "get_product": lambda db, user_id, **kw: get_product(db, **kw),
-    "add_to_cart": lambda db, user_id, **kw: add_to_cart(db, user_id, **kw),
-    "view_cart": lambda db, user_id, **kw: view_cart(db, user_id),
-    "remove_from_cart": lambda db, user_id, **kw: remove_from_cart(db, user_id, **kw),
+    "search_products": lambda db, user_id, session_id, **kw: search_products(db, **kw),
+    "get_product": lambda db, user_id, session_id, **kw: get_product(db, **kw),
+    "add_to_cart": lambda db, user_id, session_id, **kw: add_to_cart(db, user_id, **kw),
+    "view_cart": lambda db, user_id, session_id, **kw: view_cart(db, user_id),
+    "remove_from_cart": lambda db, user_id, session_id, **kw: remove_from_cart(db, user_id, **kw),
+    "initiate_payment": lambda db, user_id, session_id, **kw: initiate_payment(db, user_id, session_id),
 }
 
 TOOL_SCHEMAS = [
@@ -164,6 +252,16 @@ TOOL_SCHEMAS = [
                 "properties": {"sku": {"type": "string", "description": "The SKU to remove from the cart."}},
                 "required": ["sku"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "initiate_payment",
+            "description": "Propose paying for everything currently in the cart, in test mode. This "
+            "ALWAYS requires the user's explicit confirmation before anything is charged — it can "
+            "never complete on its own. Takes no arguments; it always acts on the current cart.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
 ]

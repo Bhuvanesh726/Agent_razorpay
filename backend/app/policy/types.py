@@ -22,6 +22,14 @@ class CatalogProductSnapshot:
 
 
 @dataclass(frozen=True)
+class CartLineSnapshot:
+    """One resolved cart line, for whole-cart actions like payment."""
+
+    product: CatalogProductSnapshot
+    quantity: int
+
+
+@dataclass(frozen=True)
 class ProposedCartState:
     """The state a proposed tool call would produce, if executed.
 
@@ -29,6 +37,10 @@ class ProposedCartState:
     claims about price or stock. `product` is resolved from the real catalog
     by the caller (the harness) before evaluation; if it's None, the sku the
     agent referenced does not exist.
+
+    `cart_line_items` and `existing_order_status` are only populated for
+    whole-cart actions (currently just `initiate_payment`) — add_to_cart and
+    friends leave them None.
     """
 
     session_id: str
@@ -39,6 +51,8 @@ class ProposedCartState:
     sku: str | None = None
     quantity: int | None = None
     product: CatalogProductSnapshot | None = None
+    cart_line_items: tuple[CartLineSnapshot, ...] | None = None
+    existing_order_status: str | None = None
 
     @property
     def line_total_paise(self) -> int | None:

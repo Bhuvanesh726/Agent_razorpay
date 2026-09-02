@@ -1,11 +1,43 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { confirmPendingAction, fetchAuditTrail, sendAgentMessage } from "@/lib/api";
-import type { AuditTrail, ChatMessage, PendingAction } from "@/lib/types";
+import { confirmPendingAction, fetchAuditTrail, reportPaymentFailed, sendAgentMessage, verifyPayment } from "@/lib/api";
+import type { AuditTrail, ChatMessage, PaymentInfo, PendingAction } from "@/lib/types";
 
 interface Props {
   onCartChanged: () => void;
+}
+
+interface RazorpaySuccessResponse {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+interface RazorpayFailureResponse {
+  error: { code?: string; description?: string };
+}
+
+interface RazorpayInstance {
+  on(event: "payment.failed", handler: (response: RazorpayFailureResponse) => void): void;
+  open(): void;
+}
+
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  order_id: string;
+  name: string;
+  description?: string;
+  handler: (response: RazorpaySuccessResponse) => void;
+  modal?: { ondismiss?: () => void };
+}
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayOptions) => RazorpayInstance;
+  }
 }
 
 const SESSION_STORAGE_KEY = "razorpay-agent-session-id";
@@ -42,6 +74,7 @@ export default function ChatPanel({ onCartChanged }: Props) {
   const [showAudit, setShowAudit] = useState(false);
   const [auditTrail, setAuditTrail] = useState<AuditTrail | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [payingOrderId, setPayingOrderId] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,6 +83,63 @@ export default function ChatPanel({ onCartChanged }: Props) {
 
   function pushMessage(role: ChatMessage["role"], text: string) {
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role, text }]);
+  }
+
+  function openCheckout(payment: PaymentInfo) {
+    if (!window.Razorpay) {
+      setError("Razorpay Checkout hasn't loaded yet — please try again in a moment.");
+      return;
+    }
+    setPayingOrderId(payment.order_id);
+
+    const rzp = new window.Razorpay({
+      key: payment.razorpay_key_id,
+      amount: payment.amount_paise,
+      currency: payment.currency,
+      order_id: payment.razorpay_order_id,
+      name: "Razorpay Shop (test mode)",
+      description: `Order #${payment.order_id}`,
+      handler: async (response) => {
+        try {
+          const result = await verifyPayment(
+            response.razorpay_order_id,
+            response.razorpay_payment_id,
+            response.razorpay_signature
+          );
+          pushMessage("assistant", result.status === "PAID" ? `✅ ${result.message}` : `❌ ${result.message}`);
+          onCartChanged();
+          if (showAudit) refreshAudit();
+        } catch (e) {
+          setError(e instanceof Error ? e.message : String(e));
+        } finally {
+          setPayingOrderId(null);
+        }
+      },
+      modal: {
+        ondismiss: () => {
+          setPayingOrderId(null);
+          pushMessage("assistant", "Checkout closed without completing payment. Ask to pay again if you'd like.");
+        },
+      },
+    });
+
+    rzp.on("payment.failed", async (response) => {
+      try {
+        const result = await reportPaymentFailed(
+          payment.razorpay_order_id,
+          response.error?.code,
+          response.error?.description
+        );
+        pushMessage("assistant", `❌ ${result.message}`);
+        if (showAudit) refreshAudit();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setPayingOrderId(null);
+      }
+    });
+
+    rzp.open();
   }
 
   async function handleSend() {
@@ -67,6 +157,7 @@ export default function ChatPanel({ onCartChanged }: Props) {
       setPending(res.pending);
       onCartChanged();
       if (showAudit) refreshAudit();
+      if (res.payment) openCheckout(res.payment);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -83,6 +174,7 @@ export default function ChatPanel({ onCartChanged }: Props) {
       setPending(res.pending);
       onCartChanged();
       if (showAudit) refreshAudit();
+      if (res.payment) openCheckout(res.payment);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -182,6 +274,10 @@ export default function ChatPanel({ onCartChanged }: Props) {
             </button>
           </div>
         </div>
+      )}
+
+      {payingOrderId != null && (
+        <p className="text-xs text-gray-400">Waiting for checkout on order #{payingOrderId}…</p>
       )}
 
       {error && (

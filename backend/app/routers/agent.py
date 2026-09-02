@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.agent import harness
 from app.core.config import settings
 from app.database import get_db
-from app.schemas.agent import ChatRequest, ChatResponse, ConfirmRequest, PendingActionOut
+from app.schemas.agent import ChatRequest, ChatResponse, ConfirmRequest, PaymentInfoOut, PendingActionOut
 
 router = APIRouter(tags=["agent"])
 
@@ -18,6 +18,7 @@ def _to_response(result) -> ChatResponse:
         status=result.status,
         pending=PendingActionOut(**result.pending) if result.pending else None,
         cart=result.cart,
+        payment=PaymentInfoOut(**result.payment) if result.payment else None,
     )
 
 

@@ -1,6 +1,8 @@
 from app.core.config import settings
 from app.policy.rules import (
     ConfirmationThresholdRule,
+    DuplicatePaymentRule,
+    PaymentAuthorizationRule,
     PerItemPriceRule,
     QuantityRule,
     Rule,
@@ -38,13 +40,23 @@ class PolicyEngine:
 
 
 def default_policy_engine() -> PolicyEngine:
+    unknown_sku = UnknownSkuRule()
+    stock = StockRule()
+    per_item_price = PerItemPriceRule(settings.policy_per_item_max_paise)
+    quantity = QuantityRule(settings.policy_quantity_max)
+    spend_cap = SpendCapRule(settings.policy_default_spend_cap_paise)
+
     return PolicyEngine(
         rules=[
-            UnknownSkuRule(),
-            StockRule(),
-            PerItemPriceRule(settings.policy_per_item_max_paise),
-            QuantityRule(settings.policy_quantity_max),
-            SpendCapRule(settings.policy_default_spend_cap_paise),
+            unknown_sku,
+            stock,
+            per_item_price,
+            quantity,
+            spend_cap,
             ConfirmationThresholdRule(settings.policy_confirmation_threshold_paise),
+            DuplicatePaymentRule(),
+            # Re-validates the whole cart through the same DENY-capable item
+            # rules above — one set of thresholds, no duplicated logic.
+            PaymentAuthorizationRule(item_rules=[unknown_sku, stock, per_item_price, quantity, spend_cap]),
         ]
     )

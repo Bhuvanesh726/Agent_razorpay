@@ -19,8 +19,18 @@ class PendingActionOut(BaseModel):
     reason: str | None = None
 
 
+class PaymentInfoOut(BaseModel):
+    order_id: int
+    razorpay_order_id: str
+    amount_paise: int
+    currency: str
+    razorpay_key_id: str
+    status: str
+
+
 class ChatResponse(BaseModel):
     reply: str
     status: str  # "completed" | "awaiting_confirmation" | "iteration_limit"
     pending: PendingActionOut | None = None
     cart: dict
+    payment: PaymentInfoOut | None = None

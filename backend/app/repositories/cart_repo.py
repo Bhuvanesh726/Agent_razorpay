@@ -38,6 +38,15 @@ def get_item(db: Session, item_id: int) -> CartItem | None:
     return db.get(CartItem, item_id)
 
 
+def get_by_id(db: Session, cart_id: int) -> Cart | None:
+    return db.get(Cart, cart_id)
+
+
+def mark_checked_out(db: Session, cart: Cart) -> None:
+    cart.status = "checked_out"
+    db.flush()
+
+
 def add_item(db: Session, item: CartItem) -> CartItem:
     db.add(item)
     db.flush()

@@ -53,11 +53,30 @@ export interface PendingAction {
   reason: string | null;
 }
 
+export interface PaymentInfo {
+  order_id: number;
+  razorpay_order_id: string;
+  amount_paise: number;
+  currency: string;
+  razorpay_key_id: string;
+  status: string;
+}
+
 export interface AgentChatResponse {
   reply: string;
   status: "completed" | "awaiting_confirmation" | "iteration_limit";
   pending: PendingAction | null;
   cart: Cart;
+  payment: PaymentInfo | null;
+}
+
+export interface PaymentResult {
+  status: "PAID" | "FAILED";
+  order_id: number;
+  razorpay_order_id: string | null;
+  razorpay_payment_id: string | null;
+  amount_paise: number;
+  message: string;
 }
 
 export interface ChatMessage {

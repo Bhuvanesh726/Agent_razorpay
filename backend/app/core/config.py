@@ -28,6 +28,11 @@ class Settings(BaseSettings):
 
     agent_max_iterations: int = 8
 
+    # --- Layer 2: payments (Razorpay test mode) ---
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+    razorpay_currency: str = "INR"
+
     # Policy thresholds. All in paise; all overridable via env, all with a
     # sane default so the system is never unbounded even if unconfigured.
     policy_default_spend_cap_paise: int = 500_000  # ₹5,000 — used only when a session sets no budget_paise

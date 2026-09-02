@@ -17,6 +17,8 @@ from app.models import (  # noqa: E402,F401
     AuditEvent,
     Cart,
     CartItem,
+    Order,
+    Payment,
     Product,
 )
 
