@@ -1,0 +1,572 @@
+{
+  "_comment": "Seed catalog for Razorpay AI Buildathon agent. Prices are in PAISE (integer). 100 paise = 1 rupee.",
+  "categories": [
+    "groceries",
+    "ice_creams",
+    "chocolates",
+    "dairy",
+    "cool_drinks",
+    "biscuits",
+    "electronics",
+    "pet_supplies"
+  ],
+  "products": [
+    {
+      "sku": "GRO-001",
+      "name": "Aashirvaad Shudh Chakki Atta 5kg",
+      "brand": "Aashirvaad",
+      "category": "groceries",
+      "price_paise": 27500,
+      "unit": "5 kg pack",
+      "stock": 40,
+      "description": "Whole wheat flour, stone-ground, for soft rotis.",
+      "tags": ["atta", "flour", "wheat", "staple"]
+    },
+    {
+      "sku": "GRO-002",
+      "name": "India Gate Basmati Rice Classic 5kg",
+      "brand": "India Gate",
+      "category": "groceries",
+      "price_paise": 64900,
+      "unit": "5 kg pack",
+      "stock": 25,
+      "description": "Aged long-grain basmati rice for biryani and pulao.",
+      "tags": ["rice", "basmati", "staple"]
+    },
+    {
+      "sku": "GRO-003",
+      "name": "Fortune Sunlite Refined Sunflower Oil 1L",
+      "brand": "Fortune",
+      "category": "groceries",
+      "price_paise": 15500,
+      "unit": "1 L pouch",
+      "stock": 60,
+      "description": "Light refined sunflower cooking oil.",
+      "tags": ["oil", "cooking", "sunflower", "staple"]
+    },
+    {
+      "sku": "GRO-004",
+      "name": "Tata Salt Iodised 1kg",
+      "brand": "Tata",
+      "category": "groceries",
+      "price_paise": 2800,
+      "unit": "1 kg pack",
+      "stock": 120,
+      "description": "Vacuum-evaporated iodised salt.",
+      "tags": ["salt", "staple", "cheap"]
+    },
+    {
+      "sku": "GRO-005",
+      "name": "Tata Sampann Toor Dal 1kg",
+      "brand": "Tata Sampann",
+      "category": "groceries",
+      "price_paise": 18900,
+      "unit": "1 kg pack",
+      "stock": 45,
+      "description": "Unpolished toor dal with natural protein retained.",
+      "tags": ["dal", "pulses", "lentils", "staple"]
+    },
+    {
+      "sku": "GRO-006",
+      "name": "Tata Tea Premium 500g",
+      "brand": "Tata Tea",
+      "category": "groceries",
+      "price_paise": 27000,
+      "unit": "500 g pack",
+      "stock": 50,
+      "description": "Blended Assam tea leaves for strong chai.",
+      "tags": ["tea", "chai", "beverage"]
+    },
+    {
+      "sku": "GRO-007",
+      "name": "Nescafe Classic Instant Coffee 100g",
+      "brand": "Nescafe",
+      "category": "groceries",
+      "price_paise": 39500,
+      "unit": "100 g jar",
+      "stock": 35,
+      "description": "Instant coffee granules, 100% pure.",
+      "tags": ["coffee", "instant", "beverage"]
+    },
+    {
+      "sku": "GRO-008",
+      "name": "Maggi 2-Minute Masala Noodles 12-pack",
+      "brand": "Maggi",
+      "category": "groceries",
+      "price_paise": 16800,
+      "unit": "12 x 70 g",
+      "stock": 70,
+      "description": "Instant masala noodles, family pack.",
+      "tags": ["noodles", "instant", "snack", "maggi"]
+    },
+
+    {
+      "sku": "ICE-001",
+      "name": "Amul Vanilla Royale Ice Cream 1L",
+      "brand": "Amul",
+      "category": "ice_creams",
+      "price_paise": 29000,
+      "unit": "1 L tub",
+      "stock": 20,
+      "description": "Classic vanilla ice cream made with real milk.",
+      "tags": ["ice cream", "vanilla", "frozen", "dessert"]
+    },
+    {
+      "sku": "ICE-002",
+      "name": "Kwality Wall's Cornetto Double Chocolate 4-pack",
+      "brand": "Kwality Wall's",
+      "category": "ice_creams",
+      "price_paise": 16000,
+      "unit": "4 cones",
+      "stock": 30,
+      "description": "Chocolate cone with crunchy nuts and chocolate tip.",
+      "tags": ["ice cream", "cone", "chocolate", "frozen"]
+    },
+    {
+      "sku": "ICE-003",
+      "name": "Havmor Butterscotch Bonanza 700ml",
+      "brand": "Havmor",
+      "category": "ice_creams",
+      "price_paise": 23500,
+      "unit": "700 ml tub",
+      "stock": 18,
+      "description": "Butterscotch ice cream loaded with caramel crunch.",
+      "tags": ["ice cream", "butterscotch", "frozen", "dessert"]
+    },
+    {
+      "sku": "ICE-004",
+      "name": "Vadilal Gulab Jamun Ice Cream 500ml",
+      "brand": "Vadilal",
+      "category": "ice_creams",
+      "price_paise": 19900,
+      "unit": "500 ml tub",
+      "stock": 15,
+      "description": "Indian dessert-inspired ice cream with gulab jamun pieces.",
+      "tags": ["ice cream", "indian dessert", "frozen"]
+    },
+    {
+      "sku": "ICE-005",
+      "name": "Amul Kulfi Malai Sticks 6-pack",
+      "brand": "Amul",
+      "category": "ice_creams",
+      "price_paise": 13500,
+      "unit": "6 sticks",
+      "stock": 40,
+      "description": "Traditional malai kulfi on a stick.",
+      "tags": ["kulfi", "ice cream", "frozen", "malai"]
+    },
+    {
+      "sku": "ICE-006",
+      "name": "Baskin Robbins Belgian Chocolate Tub 500ml",
+      "brand": "Baskin Robbins",
+      "category": "ice_creams",
+      "price_paise": 45000,
+      "unit": "500 ml tub",
+      "stock": 10,
+      "description": "Premium Belgian chocolate ice cream.",
+      "tags": ["ice cream", "chocolate", "premium", "frozen"]
+    },
+
+    {
+      "sku": "CHO-001",
+      "name": "Cadbury Dairy Milk Silk 150g",
+      "brand": "Cadbury",
+      "category": "chocolates",
+      "price_paise": 19000,
+      "unit": "150 g bar",
+      "stock": 55,
+      "description": "Smooth creamy milk chocolate bar.",
+      "tags": ["chocolate", "milk chocolate", "cadbury", "gift"]
+    },
+    {
+      "sku": "CHO-002",
+      "name": "Amul Dark Chocolate 55% Cocoa 150g",
+      "brand": "Amul",
+      "category": "chocolates",
+      "price_paise": 12500,
+      "unit": "150 g bar",
+      "stock": 40,
+      "description": "Dark chocolate with 55% cocoa content.",
+      "tags": ["chocolate", "dark chocolate", "cocoa"]
+    },
+    {
+      "sku": "CHO-003",
+      "name": "Ferrero Rocher 16-piece Box",
+      "brand": "Ferrero",
+      "category": "chocolates",
+      "price_paise": 74900,
+      "unit": "16 pieces",
+      "stock": 12,
+      "description": "Hazelnut and wafer chocolates in gold foil.",
+      "tags": ["chocolate", "premium", "gift", "hazelnut"]
+    },
+    {
+      "sku": "CHO-004",
+      "name": "Nestle KitKat 4-Finger 6-pack",
+      "brand": "Nestle",
+      "category": "chocolates",
+      "price_paise": 12000,
+      "unit": "6 x 37.3 g",
+      "stock": 65,
+      "description": "Crisp wafer fingers covered in milk chocolate.",
+      "tags": ["chocolate", "wafer", "kitkat", "snack"]
+    },
+    {
+      "sku": "CHO-005",
+      "name": "Cadbury Celebrations Assorted Gift Pack",
+      "brand": "Cadbury",
+      "category": "chocolates",
+      "price_paise": 38000,
+      "unit": "186.6 g box",
+      "stock": 22,
+      "description": "Assorted chocolate gift box for festivals.",
+      "tags": ["chocolate", "gift", "assorted", "festival"]
+    },
+    {
+      "sku": "CHO-006",
+      "name": "Snickers Chocolate Bar 6-pack",
+      "brand": "Snickers",
+      "category": "chocolates",
+      "price_paise": 15000,
+      "unit": "6 x 45 g",
+      "stock": 38,
+      "description": "Peanut, caramel and nougat chocolate bars.",
+      "tags": ["chocolate", "peanut", "caramel", "snack"]
+    },
+
+    {
+      "sku": "DAI-001",
+      "name": "Amul Taaza Toned Milk 1L",
+      "brand": "Amul",
+      "category": "dairy",
+      "price_paise": 7400,
+      "unit": "1 L pack",
+      "stock": 100,
+      "description": "Homogenised toned milk, ready to drink.",
+      "tags": ["milk", "dairy", "daily", "cheap"]
+    },
+    {
+      "sku": "DAI-002",
+      "name": "Amul Butter Salted 500g",
+      "brand": "Amul",
+      "category": "dairy",
+      "price_paise": 29500,
+      "unit": "500 g pack",
+      "stock": 45,
+      "description": "Classic salted table butter.",
+      "tags": ["butter", "dairy", "spread"]
+    },
+    {
+      "sku": "DAI-003",
+      "name": "Amul Processed Cheese Block 400g",
+      "brand": "Amul",
+      "category": "dairy",
+      "price_paise": 28000,
+      "unit": "400 g block",
+      "stock": 30,
+      "description": "Processed cheese block for sandwiches and cooking.",
+      "tags": ["cheese", "dairy", "sandwich"]
+    },
+    {
+      "sku": "DAI-004",
+      "name": "Nestle a+ Dahi Curd 400g",
+      "brand": "Nestle",
+      "category": "dairy",
+      "price_paise": 5500,
+      "unit": "400 g cup",
+      "stock": 60,
+      "description": "Thick set curd, lightly tangy.",
+      "tags": ["curd", "dahi", "yogurt", "dairy"]
+    },
+    {
+      "sku": "DAI-005",
+      "name": "Mother Dairy Paneer 200g",
+      "brand": "Mother Dairy",
+      "category": "dairy",
+      "price_paise": 9900,
+      "unit": "200 g block",
+      "stock": 35,
+      "description": "Fresh malai paneer for curries and grills.",
+      "tags": ["paneer", "dairy", "cooking", "protein"]
+    },
+    {
+      "sku": "DAI-006",
+      "name": "Amul Ghee Pure Cow 1L",
+      "brand": "Amul",
+      "category": "dairy",
+      "price_paise": 68000,
+      "unit": "1 L tin",
+      "stock": 20,
+      "description": "Pure cow ghee with rich aroma.",
+      "tags": ["ghee", "dairy", "cooking", "premium"]
+    },
+
+    {
+      "sku": "DRI-001",
+      "name": "Coca-Cola 2.25L Bottle",
+      "brand": "Coca-Cola",
+      "category": "cool_drinks",
+      "price_paise": 9500,
+      "unit": "2.25 L bottle",
+      "stock": 80,
+      "description": "Chilled cola soft drink, party size.",
+      "tags": ["cola", "soft drink", "cold drink", "party"]
+    },
+    {
+      "sku": "DRI-002",
+      "name": "Thums Up 750ml Bottle",
+      "brand": "Thums Up",
+      "category": "cool_drinks",
+      "price_paise": 4500,
+      "unit": "750 ml bottle",
+      "stock": 90,
+      "description": "Strong-fizz Indian cola.",
+      "tags": ["cola", "soft drink", "cold drink"]
+    },
+    {
+      "sku": "DRI-003",
+      "name": "Sprite Lime Flavoured 750ml",
+      "brand": "Sprite",
+      "category": "cool_drinks",
+      "price_paise": 4500,
+      "unit": "750 ml bottle",
+      "stock": 75,
+      "description": "Clear lemon-lime carbonated drink.",
+      "tags": ["lemon", "soft drink", "cold drink", "sprite"]
+    },
+    {
+      "sku": "DRI-004",
+      "name": "Real Mixed Fruit Juice 1L",
+      "brand": "Real",
+      "category": "cool_drinks",
+      "price_paise": 11500,
+      "unit": "1 L carton",
+      "stock": 50,
+      "description": "Mixed fruit juice with no added preservatives.",
+      "tags": ["juice", "fruit", "healthy", "drink"]
+    },
+    {
+      "sku": "DRI-005",
+      "name": "Red Bull Energy Drink 4-pack",
+      "brand": "Red Bull",
+      "category": "cool_drinks",
+      "price_paise": 50000,
+      "unit": "4 x 250 ml",
+      "stock": 25,
+      "description": "Carbonated energy drink with caffeine and taurine.",
+      "tags": ["energy drink", "caffeine", "premium"]
+    },
+    {
+      "sku": "DRI-006",
+      "name": "Bisleri Mineral Water 1L 6-pack",
+      "brand": "Bisleri",
+      "category": "cool_drinks",
+      "price_paise": 12000,
+      "unit": "6 x 1 L",
+      "stock": 60,
+      "description": "Packaged drinking water, multipack.",
+      "tags": ["water", "mineral water", "essentials"]
+    },
+
+    {
+      "sku": "BIS-001",
+      "name": "Parle-G Gold Biscuits 1kg",
+      "brand": "Parle",
+      "category": "biscuits",
+      "price_paise": 12000,
+      "unit": "1 kg pack",
+      "stock": 70,
+      "description": "Classic glucose biscuits, family pack.",
+      "tags": ["biscuit", "glucose", "tea time", "cheap"]
+    },
+    {
+      "sku": "BIS-002",
+      "name": "Britannia Good Day Cashew 600g",
+      "brand": "Britannia",
+      "category": "biscuits",
+      "price_paise": 11000,
+      "unit": "600 g pack",
+      "stock": 55,
+      "description": "Buttery cookies loaded with cashew pieces.",
+      "tags": ["biscuit", "cookie", "cashew", "tea time"]
+    },
+    {
+      "sku": "BIS-003",
+      "name": "Oreo Chocolate Cream Biscuits 300g",
+      "brand": "Oreo",
+      "category": "biscuits",
+      "price_paise": 9000,
+      "unit": "300 g pack",
+      "stock": 60,
+      "description": "Chocolate sandwich biscuits with vanilla cream.",
+      "tags": ["biscuit", "cream", "chocolate", "snack"]
+    },
+    {
+      "sku": "BIS-004",
+      "name": "Sunfeast Dark Fantasy Choco Fills 300g",
+      "brand": "Sunfeast",
+      "category": "biscuits",
+      "price_paise": 15000,
+      "unit": "300 g pack",
+      "stock": 40,
+      "description": "Cookies with molten chocolate centre.",
+      "tags": ["biscuit", "cookie", "chocolate", "premium"]
+    },
+    {
+      "sku": "BIS-005",
+      "name": "Britannia Marie Gold 750g",
+      "brand": "Britannia",
+      "category": "biscuits",
+      "price_paise": 10500,
+      "unit": "750 g pack",
+      "stock": 65,
+      "description": "Light tea-time biscuits, low in fat.",
+      "tags": ["biscuit", "marie", "tea time", "light"]
+    },
+    {
+      "sku": "BIS-006",
+      "name": "Parle Hide & Seek Chocolate Chip 400g",
+      "brand": "Parle",
+      "category": "biscuits",
+      "price_paise": 12500,
+      "unit": "400 g pack",
+      "stock": 48,
+      "description": "Chocolate chip cookies with real choco chips.",
+      "tags": ["biscuit", "cookie", "chocolate chip", "snack"]
+    },
+
+    {
+      "sku": "ELE-001",
+      "name": "boAt Type-C to Type-C Fast Charging Cable 1.5m",
+      "brand": "boAt",
+      "category": "electronics",
+      "price_paise": 29900,
+      "unit": "1 cable",
+      "stock": 45,
+      "description": "60W braided Type-C cable with tangle-free design.",
+      "tags": ["cable", "type-c", "charger", "fast charging"]
+    },
+    {
+      "sku": "ELE-002",
+      "name": "Mi 33W Fast Charging Adapter",
+      "brand": "Mi",
+      "category": "electronics",
+      "price_paise": 79900,
+      "unit": "1 adapter",
+      "stock": 30,
+      "description": "33W wall charger with surge protection.",
+      "tags": ["charger", "adapter", "fast charging", "wall"]
+    },
+    {
+      "sku": "ELE-003",
+      "name": "boAt Rockerz 255 Pro+ Neckband Earphones",
+      "brand": "boAt",
+      "category": "electronics",
+      "price_paise": 129900,
+      "unit": "1 unit",
+      "stock": 20,
+      "description": "Bluetooth neckband with 40-hour playback and ASAP charge.",
+      "tags": ["headphones", "earphones", "bluetooth", "neckband"]
+    },
+    {
+      "sku": "ELE-004",
+      "name": "OnePlus Bullets Wireless Z2 Earphones",
+      "brand": "OnePlus",
+      "category": "electronics",
+      "price_paise": 199900,
+      "unit": "1 unit",
+      "stock": 15,
+      "description": "Wireless earphones with 12.4mm drivers and fast pair.",
+      "tags": ["headphones", "earphones", "wireless", "premium"]
+    },
+    {
+      "sku": "ELE-005",
+      "name": "Ambrane 10000mAh Power Bank",
+      "brand": "Ambrane",
+      "category": "electronics",
+      "price_paise": 89900,
+      "unit": "1 unit",
+      "stock": 25,
+      "description": "Compact 10000mAh power bank with dual output.",
+      "tags": ["power bank", "battery", "portable", "charger"]
+    },
+    {
+      "sku": "ELE-006",
+      "name": "Portronics 3-in-1 Charging Cable",
+      "brand": "Portronics",
+      "category": "electronics",
+      "price_paise": 34900,
+      "unit": "1 cable",
+      "stock": 40,
+      "description": "Multi-head cable supporting Type-C, micro-USB and Lightning.",
+      "tags": ["cable", "multi", "charger", "travel"]
+    },
+
+    {
+      "sku": "PET-001",
+      "name": "Pedigree Adult Dry Dog Food Chicken 3kg",
+      "brand": "Pedigree",
+      "category": "pet_supplies",
+      "price_paise": 74000,
+      "unit": "3 kg pack",
+      "stock": 25,
+      "description": "Complete adult dog food with chicken and vegetables.",
+      "tags": ["dog food", "dry food", "pet", "dog", "adult"]
+    },
+    {
+      "sku": "PET-002",
+      "name": "Drools Puppy Dry Dog Food 1.2kg",
+      "brand": "Drools",
+      "category": "pet_supplies",
+      "price_paise": 39900,
+      "unit": "1.2 kg pack",
+      "stock": 30,
+      "description": "Chicken and egg puppy food for healthy growth.",
+      "tags": ["dog food", "puppy", "pet", "dog"]
+    },
+    {
+      "sku": "PET-003",
+      "name": "Whiskas Adult Cat Food Ocean Fish 1.1kg",
+      "brand": "Whiskas",
+      "category": "pet_supplies",
+      "price_paise": 45000,
+      "unit": "1.1 kg pack",
+      "stock": 28,
+      "description": "Dry cat food with ocean fish flavour.",
+      "tags": ["cat food", "pet", "cat", "dry food"]
+    },
+    {
+      "sku": "PET-004",
+      "name": "Pedigree Dentastix Dog Treats 7-pack",
+      "brand": "Pedigree",
+      "category": "pet_supplies",
+      "price_paise": 24900,
+      "unit": "7 sticks",
+      "stock": 40,
+      "description": "Daily dental chews that help reduce tartar buildup.",
+      "tags": ["dog treats", "pet", "dog", "dental", "treats"]
+    },
+    {
+      "sku": "PET-005",
+      "name": "Purepet Chicken Gravy Cat Wet Food 12-pack",
+      "brand": "Purepet",
+      "category": "pet_supplies",
+      "price_paise": 42000,
+      "unit": "12 x 70 g",
+      "stock": 22,
+      "description": "Wet cat food pouches in chicken gravy.",
+      "tags": ["cat food", "wet food", "pet", "cat"]
+    },
+    {
+      "sku": "PET-006",
+      "name": "Trixie Adjustable Dog Collar Medium",
+      "brand": "Trixie",
+      "category": "pet_supplies",
+      "price_paise": 55000,
+      "unit": "1 unit",
+      "stock": 18,
+      "description": "Adjustable nylon collar with quick-release buckle.",
+      "tags": ["dog collar", "pet accessory", "dog", "accessory"]
+    }
+  ]
+}

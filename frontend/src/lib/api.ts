@@ -1,0 +1,71 @@
+import type { Cart, Category, ProductListResponse } from "./types";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8842";
+
+const REQUEST_TIMEOUT_MS = 8000;
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...(init?.body
+        ? { ...init, headers: { "Content-Type": "application/json", ...init?.headers } }
+        : init),
+      signal: controller.signal,
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error(`Timed out reaching the API at ${API_URL}. Is the backend running?`);
+    }
+    throw new Error(`Could not reach the API at ${API_URL}. Is the backend running?`);
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail ?? `Request to ${path} failed with ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export interface ProductQuery {
+  category?: string | null;
+  search?: string;
+  minPricePaise?: number;
+  maxPricePaise?: number;
+  page?: number;
+  pageSize?: number;
+}
+
+export function fetchProducts(query: ProductQuery = {}): Promise<ProductListResponse> {
+  const params = new URLSearchParams();
+  if (query.category) params.set("category", query.category);
+  if (query.search) params.set("search", query.search);
+  if (query.minPricePaise != null) params.set("min_price_paise", String(query.minPricePaise));
+  if (query.maxPricePaise != null) params.set("max_price_paise", String(query.maxPricePaise));
+  params.set("page", String(query.page ?? 1));
+  params.set("page_size", String(query.pageSize ?? 50));
+  return request<ProductListResponse>(`/api/products?${params.toString()}`);
+}
+
+export function fetchCategories(): Promise<Category[]> {
+  return request<Category[]>("/api/categories");
+}
+
+export function fetchCart(): Promise<Cart> {
+  return request<Cart>("/api/cart");
+}
+
+export function addCartItem(sku: string, quantity = 1): Promise<Cart> {
+  return request<Cart>("/api/cart/items", {
+    method: "POST",
+    body: JSON.stringify({ sku, quantity }),
+  });
+}
+
+export function removeCartItem(itemId: number): Promise<Cart> {
+  return request<Cart>(`/api/cart/items/${itemId}`, { method: "DELETE" });
+}

@@ -1,0 +1,26 @@
+# Env
+.env
+.env.local
+!.env.example
+
+# Python
+venv/
+__pycache__/
+*.pyc
+backend/*.db
+backend/*.db-journal
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+
+# Logs
+*.log
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
