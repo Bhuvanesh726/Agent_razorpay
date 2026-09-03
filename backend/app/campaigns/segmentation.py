@@ -11,12 +11,12 @@ per-customer aggregate, not a mutually-exclusive classification.
 """
 
 from collections import Counter
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from app.campaigns.models import Customer
+from app.campaigns.models import Customer, HistoricalOrder, ProductView
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,11 @@ class CustomerProfile:
     last_order_at: datetime
     top_category: str | None
     top_category_order_share: float  # fraction of this customer's ORDERS whose dominant category is top_category
+    # Only set for browse_abandonment members: the specific SKU they
+    # repeatedly viewed and never bought. None for every other segment —
+    # those target whatever the campaign proposal features, not one
+    # customer-specific product.
+    target_sku: str | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +83,86 @@ def build_customer_profiles(db: Session) -> list[CustomerProfile]:
     return profiles
 
 
+def compute_browse_abandonment_segment(
+    db: Session,
+    as_of: datetime,
+    *,
+    min_views: int = 3,
+    window_days: int = 7,
+) -> Segment:
+    """Behavioral, not historical: catches intent in progress rather than
+    looking at what a customer already bought. A customer can qualify here
+    with zero lifetime orders — repeated recent views of one SKU they
+    haven't purchased is the entire signal, independent of purchase history.
+
+    View counts alone cannot tell *why* someone looked repeatedly and never
+    bought — price resistance and an unanswered question both produce the
+    same signal. This function does not attempt to distinguish them; see
+    docs/046b-browse-abandonment.md and the conversion figure this segment's
+    campaign reports separately, which is how that question actually gets
+    answered (or at least narrowed) instead of assumed.
+
+    A customer with multiple qualifying SKUs is assigned only the one with
+    the most views — one row per customer, like every other segment; the
+    strongest signal wins the tie rather than creating parallel campaign
+    entries for the same person.
+    """
+    base_profiles = {p.customer_key: p for p in build_customer_profiles_including_zero_orders(db)}
+
+    cutoff = as_of - timedelta(days=window_days)
+    views = db.query(ProductView).filter(ProductView.viewed_at >= cutoff, ProductView.viewed_at <= as_of).all()
+    view_counts: Counter[tuple[str, str]] = Counter()
+    for v in views:
+        view_counts[(v.user_id, v.sku)] += 1
+
+    purchased_by_customer: dict[str, set[str]] = {}
+    for order in db.query(HistoricalOrder).all():
+        key = order.customer.customer_key
+        purchased_by_customer.setdefault(key, set())
+        for item in order.items:
+            purchased_by_customer[key].add(item.sku)
+
+    best: dict[str, tuple[str, int]] = {}
+    for (customer_key, sku), count in view_counts.items():
+        if count < min_views:
+            continue
+        if sku in purchased_by_customer.get(customer_key, set()):
+            continue
+        if customer_key not in base_profiles:
+            continue  # e.g. the live shop's "user_demo" — not a synthetic customer
+        current = best.get(customer_key)
+        if current is None or count > current[1]:
+            best[customer_key] = (sku, count)
+
+    members = tuple(replace(base_profiles[key], target_sku=sku) for key, (sku, _count) in best.items())
+    return Segment(
+        name="browse_abandonment",
+        description=f"Viewed the same product {min_views}+ times in the last {window_days} days without buying it",
+        members=members,
+    )
+
+
+def build_customer_profiles_including_zero_orders(db: Session) -> list[CustomerProfile]:
+    """browse_abandonment can legitimately include a customer with zero
+    lifetime orders (someone who has only ever browsed) — build_customer_profiles()
+    skips those (every other segment is order-history-based, so a customer
+    with no orders has nothing to compute), so this variant fills in a
+    zero-valued profile for them instead of silently dropping them."""
+    profiles = {p.customer_key: p for p in build_customer_profiles(db)}
+    for c in db.query(Customer).all():
+        if c.customer_key not in profiles:
+            profiles[c.customer_key] = CustomerProfile(
+                customer_id=c.id,
+                customer_key=c.customer_key,
+                lifetime_spend_paise=0,
+                order_count=0,
+                last_order_at=c.created_at,
+                top_category=None,
+                top_category_order_share=0.0,
+            )
+    return list(profiles.values())
+
+
 def compute_segments(
     db: Session,
     as_of: datetime,
@@ -86,6 +171,8 @@ def compute_segments(
     repeat_min_orders: int = 3,
     high_value_threshold_paise: int = 200_000,
     category_loyal_min_share: float = 0.6,
+    browse_min_views: int = 3,
+    browse_window_days: int = 7,
 ) -> dict[str, Segment]:
     profiles = build_customer_profiles(db)
 
@@ -110,4 +197,7 @@ def compute_segments(
             "category_loyal", f"{category_loyal_min_share * 100:.0f}%+ of orders in one category", category_loyal
         ),
         "one_time": seg("one_time", "Exactly one lifetime order", one_time),
+        "browse_abandonment": compute_browse_abandonment_segment(
+            db, as_of, min_views=browse_min_views, window_days=browse_window_days
+        ),
     }

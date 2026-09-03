@@ -62,6 +62,25 @@ class AuditService:
     def get_trail(self, db: Session, session_id: str) -> list[AuditEvent]:
         return _repo.list_for_session(db, session_id)
 
+    def get_content_gaps(self, db: Session, *, sample_size: int = 3) -> list[dict]:
+        """Aggregates every content_gap_reported event (see
+        app/agent/tools.py::report_content_gap) by SKU — "N users asked
+        about X on this SKU; your description doesn't cover it," per the
+        merchant view. Grouped here rather than in SQL: this table's write
+        volume in a demo project never justifies a GROUP BY, and keeping
+        the aggregation in Python keeps the append-only repository's read
+        surface to a single, generic "everything of this event_type" query."""
+        events = _repo.list_by_event_type(db, "content_gap_reported")
+        by_sku: dict[str, list[str]] = {}
+        for e in events:
+            sku = (e.tool_args or {}).get("sku") or e.tool_name or "unknown"
+            question = (e.tool_args or {}).get("question") or e.reason or ""
+            by_sku.setdefault(sku, []).append(question)
+        return [
+            {"sku": sku, "count": len(questions), "sample_questions": questions[:sample_size]}
+            for sku, questions in sorted(by_sku.items(), key=lambda kv: len(kv[1]), reverse=True)
+        ]
+
     def compute_totals(self, events: list[AuditEvent]) -> dict:
         """Pure aggregation over an already-fetched trail — no DB access."""
         model_calls = [e for e in events if e.event_type == "model_call"]

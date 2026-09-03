@@ -190,6 +190,7 @@ export interface CampaignOffer {
   rule_name: string | null;
   reason: string | null;
   discount_pct: number | null;
+  sku: string | null;
   redeemed: boolean;
   revenue_paise: number;
   cogs_paise: number;
@@ -197,4 +198,10 @@ export interface CampaignOffer {
 
 export interface CampaignDetail extends CampaignSummary {
   offers: CampaignOffer[];
+}
+
+export interface ContentGap {
+  sku: string;
+  count: number;
+  sample_questions: string[];
 }

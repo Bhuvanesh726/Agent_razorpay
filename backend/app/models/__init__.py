@@ -5,6 +5,7 @@ from app.campaigns.models import (
     GenerationMeta,
     HistoricalOrder,
     HistoricalOrderItem,
+    ProductView,
 )
 from app.models.agent_session import AgentMessage, AgentSession
 from app.models.audit_event import AuditEvent
@@ -27,4 +28,5 @@ __all__ = [
     "HistoricalOrderItem",
     "CampaignRun",
     "CampaignOffer",
+    "ProductView",
 ]

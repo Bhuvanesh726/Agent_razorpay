@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
+from app.campaigns import service as campaign_service
+from app.core.config import settings
 from app.database import get_db
-from app.schemas.product import CategoryOut, ProductListOut, ProductOut
+from app.schemas.product import CategoryOut, ProductListOut, ProductOut, ProductViewCreate
 from app.services import product_service
 
 router = APIRouter(tags=["products"])
+
+CURRENT_USER_ID = settings.default_user_id
 
 
 @router.get("/api/products", response_model=ProductListOut)
@@ -37,3 +41,14 @@ def get_product(sku: str, db: Session = Depends(get_db)) -> ProductOut:
 @router.get("/api/categories", response_model=list[CategoryOut])
 def list_categories(db: Session = Depends(get_db)) -> list[CategoryOut]:
     return product_service.list_categories(db)
+
+
+@router.post("/api/products/{sku}/view", status_code=204)
+def log_product_view(sku: str, payload: ProductViewCreate, request: Request, db: Session = Depends(get_db)) -> Response:
+    """Fired by the frontend when a product detail is opened. Cheap and
+    best-effort by design (see campaign_service.log_product_view) — this
+    endpoint never returns an error the frontend would need to handle,
+    so a logging failure can never block or break browsing."""
+    request_id = getattr(request.state, "request_id", None)
+    campaign_service.log_product_view(db, user_id=CURRENT_USER_ID, sku=sku, session_id=payload.session_id, request_id=request_id)
+    return Response(status_code=204)

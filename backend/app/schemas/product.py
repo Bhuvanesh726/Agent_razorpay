@@ -33,3 +33,7 @@ class ProductListOut(BaseModel):
 class CategoryOut(BaseModel):
     category: str
     product_count: int
+
+
+class ProductViewCreate(BaseModel):
+    session_id: str | None = None

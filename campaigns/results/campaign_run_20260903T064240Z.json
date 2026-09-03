@@ -1,10 +1,10 @@
 {
   "meta": {
     "seed": 42,
-    "as_of": "2026-09-03T06:43:00",
+    "as_of": "2026-09-03T06:41:29",
     "n_customers": 20,
     "n_orders": 76,
-    "timestamp": "2026-09-03T06:44:18.879144+00:00"
+    "timestamp": "2026-09-03T06:42:40.632580+00:00"
   },
   "segments": {
     "lapsed": {
@@ -34,7 +34,7 @@
   },
   "results": [
     {
-      "campaign_id": "camp-lapsed-6348a2d5",
+      "campaign_id": "camp-lapsed-79a369e5",
       "segment_name": "lapsed",
       "status": "completed",
       "reason": null,
@@ -45,136 +45,20 @@
           "PET-001"
         ],
         "discount_pct": 0.1,
-        "message": "Welcome back! Enjoy 10% off on your favorite chocolates, drinks, and pet supplies.",
-        "rationale": "Lapsed customers have previously purchased chocolates, cool drinks, and pet supplies, so a modest 10% discount re‑engages them without over‑discounting.",
+        "message": "Welcome back! Enjoy 10% off on Cadbury Dairy Milk, Coca‑Cola, and Pedigree dog food.",
+        "rationale": "Lapsed customers who previously bought chocolates, cool drinks, and pet supplies can be re‑engaged with a modest 10% discount on best‑selling items from those categories.",
         "model_used": "nvidia/nemotron-3.5-lightning-30b-a3b",
         "fallback_used": false,
         "prompt_tokens": 3146,
-        "completion_tokens": 650,
-        "total_tokens": 3796,
+        "completion_tokens": 537,
+        "total_tokens": 3683,
         "cost_paise": 0,
-        "latency_ms": 22292
+        "latency_ms": 11977
       },
       "measurement": {
         "segment_size": 8,
-        "offers_sent": 6,
-        "offers_blocked": 0,
-        "control_size": 2,
-        "redemptions": 3,
-        "treatment_revenue_paise": 51300,
-        "control_revenue_paise": 0,
-        "control_conversion_rate": 0.0,
-        "expected_baseline_revenue_paise": 0,
-        "incremental_revenue_paise": 51300,
-        "discount_cost_paise": 5700,
-        "treatment_cogs_paise": 38760,
-        "expected_baseline_cogs_paise": 0,
-        "net_margin_impact_paise": 12540
-      }
-    },
-    {
-      "campaign_id": "camp-repeat-4f34f92c",
-      "segment_name": "repeat",
-      "status": "completed",
-      "reason": null,
-      "proposal": {
-        "skus": [
-          "GRO-001",
-          "CHO-001",
-          "PET-001"
-        ],
-        "discount_pct": 0.1,
-        "message": "Thank you for being a valued repeat customer! Enjoy 10% off on groceries, chocolates & pet supplies.",
-        "rationale": "The repeat segment's high order frequency and diverse top categories make a modest cross‑category discount an effective way to reward loyalty and encourage additional purchases.",
-        "model_used": "nvidia/nemotron-3.5-lightning-30b-a3b",
-        "fallback_used": false,
-        "prompt_tokens": 3150,
-        "completion_tokens": 611,
-        "total_tokens": 3761,
-        "cost_paise": 0,
-        "latency_ms": 12673
-      },
-      "measurement": {
-        "segment_size": 10,
-        "offers_sent": 7,
-        "offers_blocked": 1,
-        "control_size": 2,
-        "redemptions": 2,
-        "treatment_revenue_paise": 49500,
-        "control_revenue_paise": 0,
-        "control_conversion_rate": 0.0,
-        "expected_baseline_revenue_paise": 0,
-        "incremental_revenue_paise": 49500,
-        "discount_cost_paise": 5500,
-        "treatment_cogs_paise": 37284,
-        "expected_baseline_cogs_paise": 0,
-        "net_margin_impact_paise": 12216
-      }
-    },
-    {
-      "campaign_id": "camp-high_value-dde1e7a6",
-      "segment_name": "high_value",
-      "status": "completed",
-      "reason": null,
-      "proposal": {
-        "skus": [
-          "CHO-003",
-          "ICE-006",
-          "GRO-002"
-        ],
-        "discount_pct": 0.1,
-        "message": "Thank you for being a valued high‑value shopper – enjoy 10% off our best‑selling chocolates, ice creams, and groceries.",
-        "rationale": "High‑value customers spend the most and appreciate premium selections, so a modest 10% discount on top‑trending categories drives repeat purchases without eroding margins.",
-        "model_used": "nvidia/nemotron-3.5-lightning-30b-a3b",
-        "fallback_used": false,
-        "prompt_tokens": 3170,
-        "completion_tokens": 588,
-        "total_tokens": 3758,
-        "cost_paise": 0,
-        "latency_ms": 17155
-      },
-      "measurement": {
-        "segment_size": 14,
-        "offers_sent": 2,
-        "offers_blocked": 8,
-        "control_size": 4,
-        "redemptions": 1,
-        "treatment_revenue_paise": 58410,
-        "control_revenue_paise": 64900,
-        "control_conversion_rate": 0.25,
-        "expected_baseline_revenue_paise": 32450,
-        "incremental_revenue_paise": 25960,
-        "discount_cost_paise": 6490,
-        "treatment_cogs_paise": 36020,
-        "expected_baseline_cogs_paise": 18010,
-        "net_margin_impact_paise": 7950
-      }
-    },
-    {
-      "campaign_id": "camp-category_loyal-b6ffe2e1",
-      "segment_name": "category_loyal",
-      "status": "completed",
-      "reason": null,
-      "proposal": {
-        "skus": [
-          "CHO-001",
-          "GRO-001"
-        ],
-        "discount_pct": 0.1,
-        "message": "Thanks for being a loyal shopper! Get 10% off on Cadbury Dairy Milk Silk and Aashirvaad Atta – treat yourself and stock your pantry.",
-        "rationale": "The category_loyal segment shows strong spending in chocolates and groceries, so a modest 10% discount rewards their loyalty and encourages repeat purchases.",
-        "model_used": "nvidia/nemotron-3.5-lightning-30b-a3b",
-        "fallback_used": false,
-        "prompt_tokens": 3148,
-        "completion_tokens": 752,
-        "total_tokens": 3900,
-        "cost_paise": 0,
-        "latency_ms": 23956
-      },
-      "measurement": {
-        "segment_size": 7,
-        "offers_sent": 1,
-        "offers_blocked": 4,
+        "offers_sent": 0,
+        "offers_blocked": 6,
         "control_size": 2,
         "redemptions": 0,
         "treatment_revenue_paise": 0,
@@ -189,7 +73,124 @@
       }
     },
     {
-      "campaign_id": "camp-one_time-02f3e1f8",
+      "campaign_id": "camp-repeat-dc195c60",
+      "segment_name": "repeat",
+      "status": "completed",
+      "reason": null,
+      "proposal": {
+        "skus": [
+          "CHO-001",
+          "GRO-001",
+          "ELE-001"
+        ],
+        "discount_pct": 0.1,
+        "message": "Thank you for being a valued repeat shopper! Enjoy 10% off on selected groceries, chocolates & electronics.",
+        "rationale": "Repeat customers with multiple orders appreciate a modest discount on staple and lifestyle categories they already love.",
+        "model_used": "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "fallback_used": false,
+        "prompt_tokens": 3150,
+        "completion_tokens": 765,
+        "total_tokens": 3915,
+        "cost_paise": 0,
+        "latency_ms": 28017
+      },
+      "measurement": {
+        "segment_size": 10,
+        "offers_sent": 0,
+        "offers_blocked": 8,
+        "control_size": 2,
+        "redemptions": 0,
+        "treatment_revenue_paise": 0,
+        "control_revenue_paise": 0,
+        "control_conversion_rate": 0.0,
+        "expected_baseline_revenue_paise": 0,
+        "incremental_revenue_paise": 0,
+        "discount_cost_paise": 0,
+        "treatment_cogs_paise": 0,
+        "expected_baseline_cogs_paise": 0,
+        "net_margin_impact_paise": 0
+      }
+    },
+    {
+      "campaign_id": "camp-high_value-d4fe9e40",
+      "segment_name": "high_value",
+      "status": "completed",
+      "reason": null,
+      "proposal": {
+        "skus": [
+          "CHO-003",
+          "GRO-002",
+          "ICE-006"
+        ],
+        "discount_pct": 0.1,
+        "message": "Enjoy 10% off on premium chocolates, basmati rice, and Belgian chocolate ice cream – thank you for being a valued high‑value shopper!",
+        "rationale": "High‑value customers spend the most and favor premium categories like chocolates, groceries, and ice cream; a modest 10% discount on best‑selling items reinforces loyalty without eroding margins.",
+        "model_used": "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "fallback_used": false,
+        "prompt_tokens": 3170,
+        "completion_tokens": 636,
+        "total_tokens": 3806,
+        "cost_paise": 0,
+        "latency_ms": 12728
+      },
+      "measurement": {
+        "segment_size": 14,
+        "offers_sent": 0,
+        "offers_blocked": 10,
+        "control_size": 4,
+        "redemptions": 0,
+        "treatment_revenue_paise": 0,
+        "control_revenue_paise": 64900,
+        "control_conversion_rate": 0.25,
+        "expected_baseline_revenue_paise": 0,
+        "incremental_revenue_paise": 0,
+        "discount_cost_paise": 0,
+        "treatment_cogs_paise": 0,
+        "expected_baseline_cogs_paise": 0,
+        "net_margin_impact_paise": 0
+      }
+    },
+    {
+      "campaign_id": "camp-category_loyal-99e10851",
+      "segment_name": "category_loyal",
+      "status": "completed",
+      "reason": null,
+      "proposal": {
+        "skus": [
+          "CHO-003",
+          "GRO-002",
+          "ICE-006"
+        ],
+        "discount_pct": 0.1,
+        "message": "Thank you for being a valued loyal shopper! Enjoy 10% off on our finest chocolates, groceries, and ice creams.",
+        "rationale": "Loyal customers who spend heavily across categories will appreciate a modest discount on flagship items from their preferred product lines.",
+        "model_used": "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "fallback_used": false,
+        "prompt_tokens": 3148,
+        "completion_tokens": 630,
+        "total_tokens": 3778,
+        "cost_paise": 0,
+        "latency_ms": 16490
+      },
+      "measurement": {
+        "segment_size": 7,
+        "offers_sent": 0,
+        "offers_blocked": 5,
+        "control_size": 2,
+        "redemptions": 0,
+        "treatment_revenue_paise": 0,
+        "control_revenue_paise": 0,
+        "control_conversion_rate": 0.0,
+        "expected_baseline_revenue_paise": 0,
+        "incremental_revenue_paise": 0,
+        "discount_cost_paise": 0,
+        "treatment_cogs_paise": 0,
+        "expected_baseline_cogs_paise": 0,
+        "net_margin_impact_paise": 0
+      }
+    },
+    {
+      "campaign_id": "camp-one_time-c6e3efb8",
       "segment_name": "one_time",
       "status": "blocked_at_segment",
       "reason": "Segment 'one_time' has only 4 member(s), below the minimum of 5 needed to draw a reliable conclusion — refusing to run.",
@@ -197,7 +198,7 @@
       "measurement": null
     },
     {
-      "campaign_id": "camp-browse_abandonment-5468c6ff",
+      "campaign_id": "camp-browse_abandonment-d0e0e886",
       "segment_name": "browse_abandonment",
       "status": "completed",
       "reason": null,

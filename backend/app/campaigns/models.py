@@ -75,6 +75,26 @@ class HistoricalOrderItem(Base):
     order: Mapped["HistoricalOrder"] = relationship(back_populates="items")
 
 
+class ProductView(Base):
+    """A product-detail-open event. Two producers write here: the real
+    frontend (user_id = settings.default_user_id, the single hardcoded demo
+    shopper) and the synthetic history generator (user_id = a synthetic
+    Customer.customer_key, e.g. "CUST-007"). Both share this table rather
+    than needing two — the browse-abandonment segment only ever aggregates
+    rows whose user_id matches a synthetic customer_key, so real-shop views
+    are harmlessly ignored by segmentation while still proving the live
+    logging path works end to end."""
+
+    __tablename__ = "product_views"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    sku: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    viewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, index=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
 class CampaignRun(Base):
     __tablename__ = "campaign_runs"
 
@@ -105,6 +125,12 @@ class CampaignOffer(Base):
     rule_name: Mapped[str | None] = mapped_column(String(60), nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     discount_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The SKU this specific customer was offered. For the original five
+    # segments this is always the campaign's shared primary featured
+    # product; for browse_abandonment it's personalized per customer (the
+    # exact product they repeatedly viewed) — nullable only because rows
+    # written before this column existed have no value to backfill.
+    sku: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Simulated, never observed — see app/campaigns/simulation.py and
     # docs/046-campaigns.md for the documented redemption-probability model.
     redeemed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

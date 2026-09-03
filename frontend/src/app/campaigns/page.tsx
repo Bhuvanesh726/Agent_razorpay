@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { fetchCampaign, fetchCampaigns, fetchSegments } from "@/lib/api";
-import type { CampaignDetail, CampaignSummary, Segment } from "@/lib/types";
+import { fetchCampaign, fetchCampaigns, fetchContentGaps, fetchSegments } from "@/lib/api";
+import type { CampaignDetail, CampaignSummary, ContentGap, Segment } from "@/lib/types";
 
 function paise(p: number): string {
   return `₹${(p / 100).toFixed(2)}`;
@@ -23,16 +23,18 @@ function DecisionBadge({ decision }: { decision: string | null }) {
 export default function CampaignsPage() {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
+  const [contentGaps, setContentGaps] = useState<ContentGap[]>([]);
   const [selected, setSelected] = useState<CampaignDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchSegments(), fetchCampaigns()])
-      .then(([segs, camps]) => {
+    Promise.all([fetchSegments(), fetchCampaigns(), fetchContentGaps()])
+      .then(([segs, camps, gaps]) => {
         setSegments(segs);
         setCampaigns(camps);
+        setContentGaps(gaps);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -158,10 +160,28 @@ export default function CampaignsPage() {
               {selected.proposal && (
                 <div className="rounded-md bg-gray-50 p-3 text-sm">
                   <p>
-                    <strong>{(selected.proposal.discount_pct * 100).toFixed(0)}% off</strong> {selected.proposal.skus.join(", ")}
+                    <strong>{(selected.proposal.discount_pct * 100).toFixed(0)}% off</strong>{" "}
+                    {selected.proposal.skus.length > 0 ? selected.proposal.skus.join(", ") : "personalized per customer (see table below)"}
                   </p>
                   <p className="mt-1 text-gray-700">&ldquo;{selected.proposal.message}&rdquo;</p>
                   <p className="mt-1 text-xs text-gray-400">{selected.proposal.rationale}</p>
+                </div>
+              )}
+
+              {selected.segment_name === "browse_abandonment" && selected.measurement && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  <p className="font-medium">
+                    Conversion rate for this segment:{" "}
+                    {selected.measurement.offers_sent > 0
+                      ? `${((selected.measurement.redemptions / selected.measurement.offers_sent) * 100).toFixed(1)}%`
+                      : "n/a (no offers sent)"}
+                  </p>
+                  <p className="mt-1">
+                    Reported separately on purpose: repeated views without a purchase has at least two plausible
+                    causes — the price is above what this customer will pay, or the description doesn&rsquo;t answer a
+                    question they have. View counts alone can&rsquo;t tell which. A low conversion rate here is
+                    evidence worth investigating (check &ldquo;Content gaps&rdquo; below), not proof of either cause.
+                  </p>
                 </div>
               )}
 
@@ -186,6 +206,7 @@ export default function CampaignsPage() {
                     <tr>
                       <th className="p-1.5">Customer</th>
                       <th className="p-1.5">Group</th>
+                      <th className="p-1.5">SKU</th>
                       <th className="p-1.5">Decision</th>
                       <th className="p-1.5">Rule</th>
                       <th className="p-1.5">Redeemed</th>
@@ -198,6 +219,7 @@ export default function CampaignsPage() {
                       <tr key={i} className="border-t border-gray-100 align-top">
                         <td className="p-1.5 whitespace-nowrap">{o.customer_key}</td>
                         <td className="p-1.5 whitespace-nowrap">{o.group}</td>
+                        <td className="p-1.5 whitespace-nowrap">{o.sku ?? "—"}</td>
                         <td className="p-1.5"><DecisionBadge decision={o.decision} /></td>
                         <td className="p-1.5 whitespace-nowrap">{o.rule_name ?? "—"}</td>
                         <td className="p-1.5">{o.redeemed ? "yes" : "no"}</td>
@@ -210,6 +232,33 @@ export default function CampaignsPage() {
               </div>
             </section>
           )}
+
+          <section>
+            <h2 className="mb-2 text-sm font-semibold text-gray-700">Content gaps</h2>
+            <p className="mb-2 text-xs text-gray-500">
+              Questions the shopping assistant couldn&rsquo;t answer from a product&rsquo;s description. Not filled
+              in automatically — see docs/046b-browse-abandonment.md for why.
+            </p>
+            {contentGaps.length === 0 ? (
+              <p className="text-sm text-gray-400">No content gaps reported yet.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {contentGaps.map((g) => (
+                  <div key={g.sku} className="rounded-md border border-gray-200 p-2 text-sm">
+                    <p>
+                      <strong>{g.count}</strong> user(s) asked about <strong>{g.sku}</strong> — your description
+                      doesn&rsquo;t cover this.
+                    </p>
+                    <ul className="mt-1 list-disc pl-5 text-xs text-gray-500">
+                      {g.sample_questions.map((q, i) => (
+                        <li key={i}>{q}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </>
       )}
     </div>

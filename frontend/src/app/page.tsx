@@ -6,8 +6,11 @@ import type { Cart, Category, Product } from "@/lib/types";
 import CategoryTabs from "@/components/CategoryTabs";
 import SearchBox from "@/components/SearchBox";
 import ProductGrid from "@/components/ProductGrid";
+import ProductDetailModal from "@/components/ProductDetailModal";
 import CartSidebar from "@/components/CartSidebar";
 import ChatPanel from "@/components/ChatPanel";
+
+const CHAT_SESSION_STORAGE_KEY = "razorpay-agent-session-id";
 
 export default function Home() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -19,6 +22,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [addingSku, setAddingSku] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
+  const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
 
   function refreshCart() {
     fetchCart().then(setCart).catch((e) => setError(e.message));
@@ -51,6 +55,19 @@ export default function Home() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setAddingSku(null);
+    }
+  }
+
+  async function handleAddFromModal(sku: string) {
+    await handleAdd(sku);
+    setViewingProduct(null);
+  }
+
+  function currentSessionId(): string | null {
+    try {
+      return window.localStorage.getItem(CHAT_SESSION_STORAGE_KEY);
+    } catch {
+      return null;
     }
   }
 
@@ -97,7 +114,7 @@ export default function Home() {
           {loading ? (
             <p className="text-sm text-gray-500">Loading products...</p>
           ) : (
-            <ProductGrid products={products} onAdd={handleAdd} addingSku={addingSku} />
+            <ProductGrid products={products} onAdd={handleAdd} onView={setViewingProduct} addingSku={addingSku} />
           )}
         </main>
 
@@ -105,6 +122,16 @@ export default function Home() {
 
         <CartSidebar cart={cart} onRemove={handleRemove} removingId={removingId} />
       </div>
+
+      {viewingProduct && (
+        <ProductDetailModal
+          product={viewingProduct}
+          sessionId={currentSessionId()}
+          onClose={() => setViewingProduct(null)}
+          onAdd={handleAddFromModal}
+          adding={addingSku === viewingProduct.sku}
+        />
+      )}
     </div>
   );
 }

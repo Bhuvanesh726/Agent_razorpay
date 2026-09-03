@@ -16,6 +16,7 @@ class CampaignOfferOut(BaseModel):
     rule_name: str | None
     reason: str | None
     discount_pct: float | None
+    sku: str | None
     redeemed: bool
     revenue_paise: int
     cogs_paise: int
@@ -56,3 +57,9 @@ class CampaignSummaryOut(BaseModel):
 
 class CampaignDetailOut(CampaignSummaryOut):
     offers: list[CampaignOfferOut]
+
+
+class ContentGapOut(BaseModel):
+    sku: str
+    count: int
+    sample_questions: list[str]

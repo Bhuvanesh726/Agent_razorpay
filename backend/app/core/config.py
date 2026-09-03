@@ -71,6 +71,15 @@ class Settings(BaseSettings):
     campaign_base_organic_conversion_rate: float = 0.05  # baseline chance ANY customer buys the featured product anyway
     campaign_discount_lift_sensitivity: float = 0.6  # extra conversion-probability points per 1.0 (100%) of discount_pct
 
+    # --- Layer 4.6b: browse abandonment segment ---
+    campaign_browse_min_views: int = 3  # same SKU viewed at least this many times...
+    campaign_browse_window_days: int = 7  # ...within this many days, with no purchase of it
+    # Deliberately small: a nudge for someone already close to buying, not
+    # persuasion for someone who needs convincing. Fixed by config, never
+    # proposed by the LLM — there's no judgment call to make about "how much
+    # to discount a product this customer already told us they're circling."
+    campaign_browse_abandonment_discount_pct: float = 0.02
+
     # --- Layer 3: chaos injection + resilience ---
     # A global, sticky fault for a demo segment (e.g. CHAOS_FAULT=SLOW_LLM).
     # Empty = off. Overridable per-request via the X-Chaos-Fault header.

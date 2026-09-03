@@ -157,6 +157,32 @@ def decline_upsell(db: Session, user_id: str, session_id: str) -> dict:
     return {"declined_sku": state.pending.sku}
 
 
+def report_content_gap(db: Session, user_id: str, session_id: str, sku: str, question: str) -> dict:
+    """Flags a question about a product that its catalog description
+    doesn't answer — logged as an ordinary audit event (event_type
+    "content_gap_reported"), aggregated merchant-side by
+    GET /api/campaigns/content-gaps (grouped by sku, with example
+    questions). No new table: this reuses the exact same append-only
+    audit log every other event in this project already writes to.
+
+    Not policy-gated — flagging a documentation gap is never a risk, same
+    reasoning as decline_upsell. Calling this never stops the model from
+    still giving the user its best available answer; it only records that
+    the description itself didn't cover it.
+    """
+    _audit.log_event(
+        db,
+        session_id=session_id,
+        user_id=user_id,
+        event_type="content_gap_reported",
+        actor="agent",
+        tool_name=sku,
+        tool_args={"sku": sku, "question": question},
+        reason=question,
+    )
+    return {"logged": True}
+
+
 def initiate_payment(db: Session, user_id: str, session_id: str) -> dict:
     """Creates (or reuses) the order + Razorpay order for the current cart.
 
@@ -277,6 +303,7 @@ TOOL_FUNCTIONS = {
     "remove_from_cart": lambda db, user_id, session_id, **kw: remove_from_cart(db, user_id, **kw),
     "initiate_payment": lambda db, user_id, session_id, **kw: initiate_payment(db, user_id, session_id),
     "decline_upsell": lambda db, user_id, session_id, **kw: decline_upsell(db, user_id, session_id),
+    "report_content_gap": lambda db, user_id, session_id, **kw: report_content_gap(db, user_id, session_id, **kw),
 }
 
 TOOL_SCHEMAS = [
@@ -360,6 +387,24 @@ TOOL_SCHEMAS = [
             "(a 'suggested_upsell' field on a prior tool result). Call this once the user has said no "
             "or clearly moved on, so it is not suggested again this session. Takes no arguments.",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "report_content_gap",
+            "description": "Flag that a product's catalog description does not answer a question the "
+            "user just asked about it. Call this in addition to giving your best available answer, not "
+            "instead of it — this only records that the merchant's description has a gap, it never "
+            "blocks or changes your reply to the user.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sku": {"type": "string", "description": "The SKU whose description didn't cover the question."},
+                    "question": {"type": "string", "description": "The user's question, close to verbatim."},
+                },
+                "required": ["sku", "question"],
+            },
         },
     },
     {

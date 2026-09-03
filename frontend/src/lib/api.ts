@@ -5,6 +5,7 @@ import type {
   CampaignSummary,
   Cart,
   Category,
+  ContentGap,
   PaymentResult,
   ProductListResponse,
   Segment,
@@ -128,6 +129,21 @@ export function verifyPayment(
       razorpay_signature: razorpaySignature,
     }),
   });
+}
+
+export function logProductView(sku: string, sessionId: string | null): Promise<void> {
+  // Fire-and-forget by contract: the backend endpoint is best-effort and
+  // never errors, but a network failure (offline, blocked request) could
+  // still reject the fetch — swallow it here too, since a page render or
+  // a click must never wait on or break over a view-logging call.
+  return request<void>(`/api/products/${encodeURIComponent(sku)}/view`, {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  }).catch(() => undefined);
+}
+
+export function fetchContentGaps(): Promise<ContentGap[]> {
+  return request("/api/campaigns/content-gaps");
 }
 
 export function fetchSegments(): Promise<Segment[]> {

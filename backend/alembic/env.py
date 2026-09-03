@@ -26,6 +26,7 @@ from app.models import (  # noqa: E402,F401
     Order,
     Payment,
     Product,
+    ProductView,
 )
 
 # this is the Alembic Config object, which provides
