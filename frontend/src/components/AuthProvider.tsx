@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchMe } from "@/lib/api";
-import { AuthContext, AuthUser, clearToken, getToken } from "@/lib/auth";
+import { AuthContext, AuthUser, clearToken, getToken, setToken } from "@/lib/auth";
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -31,5 +31,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     window.location.href = "/";
   }
 
-  return <AuthContext.Provider value={{ user, loading, logout }}>{children}</AuthContext.Provider>;
+  async function applyNewToken(token: string) {
+    setToken(token);
+    const me = await fetchMe();
+    setUser(me);
+  }
+
+  return <AuthContext.Provider value={{ user, loading, logout, applyNewToken }}>{children}</AuthContext.Provider>;
 }

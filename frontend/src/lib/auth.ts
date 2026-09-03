@@ -9,7 +9,9 @@ const TOKEN_STORAGE_KEY = "razorpay-agent-jwt";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8842";
 
 export interface AuthUser {
-  type: "buyer" | "merchant" | "agent";
+  // "pending" = signed in with Google but hasn't picked buyer/merchant yet
+  // at /onboarding — see docs/048-demand-loop.md.
+  type: "buyer" | "merchant" | "agent" | "pending";
   user_id: string;
   email: string | null;
   role: "BUYER" | "MERCHANT" | null;
@@ -55,12 +57,18 @@ export interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   logout: () => void;
+  // Stores a freshly-issued token (e.g. from /api/onboarding/role or
+  // /api/dev/switch-role, both of which change the role claim) and
+  // re-fetches /api/auth/me so the rest of the app sees the new role
+  // immediately, without a full page reload.
+  applyNewToken: (token: string) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextValue>({
   user: null,
   loading: true,
   logout: () => {},
+  applyNewToken: async () => {},
 });
 
 export function useAuth(): AuthContextValue {

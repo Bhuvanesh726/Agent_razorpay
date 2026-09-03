@@ -4,6 +4,7 @@ from app.policy.rules import (
     AgentSpendLimitRule,
     ConfirmationThresholdRule,
     DuplicatePaymentRule,
+    OutOfStockRule,
     PaymentAuthorizationRule,
     PerItemPriceRule,
     QuantityRule,
@@ -45,6 +46,7 @@ class PolicyEngine:
 
 def default_policy_engine() -> PolicyEngine:
     unknown_sku = UnknownSkuRule()
+    out_of_stock = OutOfStockRule()
     stock = StockRule()
     per_item_price = PerItemPriceRule(settings.policy_per_item_max_paise)
     quantity = QuantityRule(settings.policy_quantity_max)
@@ -59,6 +61,7 @@ def default_policy_engine() -> PolicyEngine:
             RevokedCredentialRule(),
             AgentScopeRule(),
             unknown_sku,
+            out_of_stock,
             stock,
             per_item_price,
             quantity,
@@ -82,6 +85,7 @@ def default_policy_engine() -> PolicyEngine:
                     RevokedCredentialRule(),
                     AgentScopeRule(),
                     unknown_sku,
+                    out_of_stock,
                     stock,
                     per_item_price,
                     quantity,

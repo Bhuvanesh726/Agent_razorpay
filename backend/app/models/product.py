@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, Index, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import settings
@@ -26,6 +26,13 @@ class Product(Base):
     cost_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     unit: Mapped[str] = mapped_column(String(60), nullable=False)
     stock: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Layer 4.8: a merchant-set markdown, 0 < pct <= campaign_max_discount_pct
+    # (the same cap the campaign system already enforces — see
+    # app/routers/merchant.py). None = no discount. price_paise stays the
+    # real list price always; app/services/product_service.py's
+    # effective_price_paise() is the one place "what a buyer actually pays"
+    # is computed from the two together.
+    discount_pct: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     # Feed freshness signal for a consuming agent's ETag/Last-Modified cache

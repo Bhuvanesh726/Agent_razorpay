@@ -27,7 +27,13 @@ class User(Base):
     # Nullable: the seeded demo user (id="user_demo") predates Google login
     # and never actually authenticated with Google.
     google_sub: Mapped[str | None] = mapped_column(String(120), unique=True, index=True, nullable=True)
-    # "BUYER" | "MERCHANT" — see docs/047-principals.md for why these are
-    # the only two roles a *human* gets (Agent is never a User row).
-    role: Mapped[str] = mapped_column(String(20), nullable=False, default="BUYER")
+    # "BUYER" | "MERCHANT" | None — see docs/047-principals.md for why these
+    # are the only two roles a *human* gets (Agent is never a User row).
+    # Nullable as of Layer 4.8: role is no longer assigned at login (the old
+    # MERCHANT_EMAILS allowlist is gone) — a new user has no role until they
+    # pick one at /onboarding. `_resolve_from_jwt` (app/auth/principal.py)
+    # resolves a null role to PrincipalType "pending", which every ordinary
+    # BUYER/MERCHANT-gated endpoint rejects by construction — onboarding is
+    # a hard gate, not a suggestion. See docs/048-demand-loop.md.
+    role: Mapped[str | None] = mapped_column(String(20), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)

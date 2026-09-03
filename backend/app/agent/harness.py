@@ -16,6 +16,7 @@ said ALLOW (or the user has explicitly confirmed via /api/agent/confirm).
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,7 @@ from app.audit.service import AuditService
 from app.auth.context import get_current_principal
 from app.core.config import settings
 from app.core.logging import logger
+from app.demand import capture as demand_capture
 from app.llm.gateway import GatewayError, ToolCall as GatewayToolCall, gateway
 from app.models.agent_credential import AgentCredential
 from app.orders import repository as order_repo
@@ -32,6 +34,7 @@ from app.policy.engine import default_policy_engine
 from app.policy.types import CartLineSnapshot, CatalogProductSnapshot, Decision, ProposedCartState
 from app.repositories import agent_session_repo, cart_repo, product_repo
 from app.services import cart_service
+from app.services.pricing import effective_price_paise
 from app.upsell import state as upsell_state
 from app.upsell.recommender import recommend as recommend_upsell
 
@@ -124,6 +127,7 @@ def handle_chat(
             upsell=_upsell_dict(db, session_id),
         )
 
+    turn_started_at = datetime.now(timezone.utc).replace(tzinfo=None)  # naive-UTC: matches how SQLite round-trips timestamp
     agent_session_repo.append_message(db, session_id, "user", content=user_message)
     db.commit()
     _audit.log_event(
@@ -136,7 +140,9 @@ def handle_chat(
         request_id=request_id,
     )
 
-    return _run_loop(db, session, request_id)
+    result = _run_loop(db, session, request_id)
+    demand_capture.maybe_capture(db, session_id, user_message, turn_started_at)
+    return result
 
 
 def handle_confirm(
@@ -597,7 +603,9 @@ def _build_proposed_state(db: Session, session, tool_name: str, args: dict) -> P
     if sku:
         product = product_repo.get_by_sku(db, sku)
         if product is not None:
-            product_snapshot = CatalogProductSnapshot(sku=product.sku, price_paise=product.price_paise, stock=product.stock)
+            product_snapshot = CatalogProductSnapshot(
+                sku=product.sku, price_paise=effective_price_paise(product), stock=product.stock
+            )
 
     return ProposedCartState(
         session_id=session.session_id,
@@ -739,7 +747,7 @@ def _process_add_to_cart_upsell(
         sku=candidate.product.sku,
         quantity=1,
         product=CatalogProductSnapshot(
-            sku=candidate.product.sku, price_paise=candidate.product.price_paise, stock=candidate.product.stock
+            sku=candidate.product.sku, price_paise=effective_price_paise(candidate.product), stock=candidate.product.stock
         ),
         upsell_proposed_count=state.proposed_count,
         upsell_declined_skus=state.declined_skus,
@@ -753,7 +761,7 @@ def _process_add_to_cart_upsell(
         event_type="policy_decision",
         actor="policy",
         tool_name="propose_upsell",
-        tool_args={"sku": candidate.product.sku, "price_paise": candidate.product.price_paise},
+        tool_args={"sku": candidate.product.sku, "price_paise": effective_price_paise(candidate.product)},
         decision=decision_result.decision.value,
         rule_name=decision_result.rule_name,
         reason=decision_result.reason,
@@ -768,7 +776,7 @@ def _process_add_to_cart_upsell(
             event_type="upsell_blocked",
             actor="policy",
             tool_name=candidate.product.sku,
-            tool_args={"sku": candidate.product.sku, "price_paise": candidate.product.price_paise},
+            tool_args={"sku": candidate.product.sku, "price_paise": effective_price_paise(candidate.product)},
             decision=decision_result.decision.value,
             rule_name=decision_result.rule_name,
             reason=decision_result.reason,
@@ -785,7 +793,7 @@ def _process_add_to_cart_upsell(
         tool_name=candidate.product.sku,
         tool_args={
             "sku": candidate.product.sku,
-            "price_paise": candidate.product.price_paise,
+            "price_paise": effective_price_paise(candidate.product),
             "cart_total_at_proposal_paise": current_total,
             "reason": candidate.reason,
         },
@@ -797,7 +805,7 @@ def _process_add_to_cart_upsell(
     result["suggested_upsell"] = {
         "sku": candidate.product.sku,
         "name": candidate.product.name,
-        "price_paise": candidate.product.price_paise,
+        "price_paise": effective_price_paise(candidate.product),
         "reason": candidate.reason,
     }
     return result

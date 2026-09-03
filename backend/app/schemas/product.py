@@ -11,7 +11,12 @@ class ProductOut(BaseModel):
     name: str
     brand: str
     category: str
+    # Always the list price — unaffected by discount_pct. What a buyer
+    # actually pays is effective_price_paise below; see app/services/pricing.py.
     price_paise: int
+    # None = no active discount. Set/cleared via the merchant dashboard,
+    # bounded by campaign_max_discount_pct — see app/routers/merchant.py.
+    discount_pct: float | None = None
     unit: str
     stock: int
     description: str
@@ -21,6 +26,18 @@ class ProductOut(BaseModel):
     @property
     def price_display(self) -> str:
         return paise_to_display(self.price_paise)
+
+    @computed_field
+    @property
+    def effective_price_paise(self) -> int:
+        if not self.discount_pct:
+            return self.price_paise
+        return round(self.price_paise * (1 - self.discount_pct / 100))
+
+    @computed_field
+    @property
+    def effective_price_display(self) -> str:
+        return paise_to_display(self.effective_price_paise)
 
 
 class ProductListOut(BaseModel):

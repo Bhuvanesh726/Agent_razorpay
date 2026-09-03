@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.models.product import Product
 from app.repositories import product_repo
 from app.schemas.catalog import CatalogFeedItemOut, CatalogFeedOut
+from app.services.pricing import effective_price_paise
 
 
 def _as_utc(dt: datetime) -> datetime:
@@ -33,7 +34,9 @@ def _to_feed_item(p: Product) -> CatalogFeedItemOut:
         description=p.description,
         brand=p.brand,
         category=p.category,
-        price_paise=p.price_paise,
+        price_paise=effective_price_paise(p),
+        original_price_paise=p.price_paise if p.discount_pct else None,
+        discount_pct=p.discount_pct,
         currency=settings.razorpay_currency,
         unit=p.unit,
         availability="in_stock" if p.stock > 0 else "out_of_stock",

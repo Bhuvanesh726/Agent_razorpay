@@ -12,6 +12,7 @@ from app.policy.rules import (
     AgentScopeRule,
     AgentSpendLimitRule,
     ConfirmationThresholdRule,
+    OutOfStockRule,
     PerItemPriceRule,
     QuantityRule,
     RevokedCredentialRule,
@@ -62,6 +63,36 @@ def test_unknown_sku_rule_ignores_non_cart_tools():
     rule = UnknownSkuRule()
     action = make_action(tool_name="search_products", sku="GHOST-999", product=None)
     assert rule.evaluate(action) is None
+
+
+# --- OutOfStockRule (Layer 4.8) ------------------------------------------
+
+
+def test_out_of_stock_rule_denies_zero_stock_sku():
+    rule = OutOfStockRule()
+    out_of_stock = CatalogProductSnapshot(sku="PET-999", price_paise=50000, stock=0)
+    action = make_action(sku=out_of_stock.sku, product=out_of_stock, quantity=1)
+    result = rule.evaluate(action)
+    assert result is not None
+    assert result.decision == Decision.DENY
+    assert result.rule_name == "OutOfStockRule"
+    assert "out of stock" in result.reason.lower()
+
+
+def test_out_of_stock_rule_allows_in_stock_sku():
+    rule = OutOfStockRule()
+    assert rule.evaluate(make_action()) is None
+
+
+def test_out_of_stock_rule_wins_over_stock_rule_in_registration_order():
+    """Both rules would fire for a stock==0 SKU with quantity requested —
+    OutOfStockRule's clearer message must win because it's registered first
+    in default_policy_engine(), not StockRule's more generic one."""
+    out_of_stock = CatalogProductSnapshot(sku="PET-999", price_paise=50000, stock=0)
+    engine = PolicyEngine(rules=[OutOfStockRule(), StockRule()])
+    result = engine.evaluate(make_action(sku=out_of_stock.sku, product=out_of_stock, quantity=1))
+    assert result.decision == Decision.DENY
+    assert result.rule_name == "OutOfStockRule"
 
 
 # --- StockRule ----------------------------------------------------------

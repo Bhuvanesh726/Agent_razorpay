@@ -59,6 +59,7 @@ def test_audit_service_has_no_update_or_delete():
         "compute_totals",
         "get_content_gaps",
         "get_agent_actions",
+        "get_upsell_revenue_total_paise",
     }
 
 

@@ -67,8 +67,14 @@ def search_products(
                 "name": p.name,
                 "brand": p.brand,
                 "category": p.category,
-                "price_paise": p.price_paise,
-                "price_display": p.price_display,
+                # Already reflects any active discount — this is what will
+                # actually be charged. discount_pct is only present when a
+                # discount is active, so the model can mention "on sale"
+                # naturally without having to compute anything itself.
+                "price_paise": p.effective_price_paise,
+                "price_display": p.effective_price_display,
+                "original_price_paise": p.price_paise if p.discount_pct else None,
+                "discount_pct": p.discount_pct,
                 "stock": p.stock,
                 "description": p.description,
             }
@@ -88,8 +94,10 @@ def get_product(db: Session, user_id: str, session_id: str, sku: str) -> dict:
         "name": product.name,
         "brand": product.brand,
         "category": product.category,
-        "price_paise": product.price_paise,
-        "price_display": product.price_display,
+        "price_paise": product.effective_price_paise,
+        "price_display": product.effective_price_display,
+        "original_price_paise": product.price_paise if product.discount_pct else None,
+        "discount_pct": product.discount_pct,
         "stock": product.stock,
         "description": product.description,
     }

@@ -89,6 +89,13 @@ class AuditService:
     def get_agent_actions(self, db: Session, credential_id: str, *, limit: int = 50) -> list[AuditEvent]:
         return _repo.list_by_principal(db, "agent", credential_id, limit=limit)
 
+    def get_upsell_revenue_total_paise(self, db: Session) -> int:
+        """Merchant-wide, across every session — the same sum
+        compute_totals() does per-session, just not scoped to one. Used by
+        the merchant dashboard's headline numbers (app/routers/merchant.py)."""
+        events = _repo.list_by_event_type(db, "upsell_accepted")
+        return sum((e.tool_args or {}).get("price_paise", 0) * (e.tool_args or {}).get("quantity", 1) for e in events)
+
     def get_content_gaps(self, db: Session, *, sample_size: int = 3) -> list[dict]:
         """Aggregates every content_gap_reported event (see
         app/agent/tools.py::report_content_gap) by SKU — "N users asked

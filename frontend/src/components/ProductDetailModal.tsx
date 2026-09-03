@@ -49,7 +49,15 @@ export default function ProductDetailModal({ product, sessionId, onClose, onAdd,
 
         <div className="mt-4 flex items-center justify-between">
           <div>
-            <p className="text-xl font-semibold">{product.price_display}</p>
+            {product.discount_pct ? (
+              <p className="flex items-baseline gap-1.5">
+                <span className="text-sm text-gray-400 line-through">{product.price_display}</span>
+                <span className="text-xl font-semibold text-green-700">{product.effective_price_display}</span>
+                <span className="text-xs font-medium text-green-700">-{product.discount_pct}%</span>
+              </p>
+            ) : (
+              <p className="text-xl font-semibold">{product.price_display}</p>
+            )}
             <p className="text-xs text-gray-400">
               {product.unit} · {product.stock > 0 ? `${product.stock} in stock` : "Out of stock"}
             </p>

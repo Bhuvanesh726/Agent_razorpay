@@ -38,6 +38,11 @@ class AuthRequirement(str, Enum):
     BUYER = "buyer"
     MERCHANT = "merchant"
     AGENT = "agent"
+    # Layer 4.8: a signed-in human who hasn't picked buyer/merchant yet at
+    # /onboarding. Only the onboarding endpoint and /api/auth/me accept it —
+    # every ordinary BUYER/MERCHANT-gated endpoint rejects it by omission,
+    # same default-deny mechanism as everything else in this file.
+    PENDING = "pending"
 
 
 def public(fn: Callable) -> Callable:

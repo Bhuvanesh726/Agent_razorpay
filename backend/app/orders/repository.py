@@ -19,6 +19,11 @@ def find_by_idempotency_key(db: Session, idempotency_key: str) -> Order | None:
     return db.scalar(select(Order).where(Order.idempotency_key == idempotency_key))
 
 
+def list_by_user(db: Session, user_id: str, *, limit: int = 10) -> list[Order]:
+    stmt = select(Order).where(Order.user_id == user_id).order_by(Order.created_at.desc()).limit(limit)
+    return list(db.scalars(stmt))
+
+
 def find_by_razorpay_order_id(db: Session, razorpay_order_id: str) -> Order | None:
     return db.scalar(select(Order).where(Order.razorpay_order_id == razorpay_order_id))
 

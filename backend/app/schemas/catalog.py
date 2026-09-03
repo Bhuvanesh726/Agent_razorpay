@@ -23,7 +23,14 @@ class CatalogFeedItemOut(BaseModel):
     description: str
     brand: str
     category: str
+    # What a buyer actually pays right now — already reflects any active
+    # discount (see app/services/pricing.py). original_price_paise/
+    # discount_pct are only present when a discount is active, so an
+    # external agent has the numbers to display "was/now" without having
+    # to compute anything itself.
     price_paise: int
+    original_price_paise: int | None = None
+    discount_pct: float | None = None
     currency: str
     unit: str
     availability: str  # "in_stock" | "out_of_stock" — the two ACP values that actually apply to this catalog

@@ -25,7 +25,7 @@ from app.database import SessionLocal
 from app.models.agent_credential import AgentCredential
 from app.models.user import User
 
-PrincipalType = Literal["buyer", "merchant", "agent"]
+PrincipalType = Literal["buyer", "merchant", "agent", "pending"]
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,12 @@ def _resolve_from_jwt(token: str, db: Session) -> Principal | None:
     user = db.get(User, payload.get("sub"))
     if user is None:
         return None
-    ptype: PrincipalType = "merchant" if user.role == "MERCHANT" else "buyer"
+    # Layer 4.8: a user with no role yet (hasn't been through /onboarding)
+    # resolves to "pending" — a principal type no ordinary BUYER/MERCHANT-
+    # gated endpoint accepts, so onboarding is a hard gate enforced by
+    # SecureAPIRoute itself, not a client-side redirect a caller could skip.
+    # See docs/048-demand-loop.md.
+    ptype: PrincipalType = "pending" if user.role is None else ("merchant" if user.role == "MERCHANT" else "buyer")
     return Principal(type=ptype, user_id=user.id, email=user.email, role=user.role)
 
 

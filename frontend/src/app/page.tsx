@@ -103,6 +103,9 @@ function Shop() {
           </p>
         </div>
         <div className="flex items-center gap-4">
+          <a href="/dashboard" className="text-sm text-gray-500 underline hover:text-gray-800">
+            Dashboard →
+          </a>
           <a href="/agents" className="text-sm text-gray-500 underline hover:text-gray-800">
             My agents →
           </a>

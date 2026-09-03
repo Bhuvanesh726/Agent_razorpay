@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.cart import Cart, CartItem
 from app.repositories import cart_repo, product_repo
 from app.schemas.cart import CartItemCreate, CartItemOut, CartOut
+from app.services.pricing import effective_price_paise
 
 
 def _to_cart_out(cart: Cart) -> CartOut:
@@ -52,8 +53,8 @@ def add_item(db: Session, user_id: str, payload: CartItemCreate) -> CartOut:
                 product_id=product.id,
                 quantity=payload.quantity,
                 # Snapshot the price now — the cart total must not drift if
-                # the catalog price changes later.
-                unit_price_paise=product.price_paise,
+                # the catalog price (or an active discount) changes later.
+                unit_price_paise=effective_price_paise(product),
                 user_id=user_id,
             ),
         )

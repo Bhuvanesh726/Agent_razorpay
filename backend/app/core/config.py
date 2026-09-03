@@ -24,7 +24,11 @@ class Settings(BaseSettings):
     # --- Layer 1: agent + policy engine ---
     nvidia_api_key: str = ""
     llm_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
-    llm_fallback: str = "openai/gpt-oss-120b"
+    # openai/gpt-oss-120b (the original default here) was decommissioned by
+    # NVIDIA on 2026-09-03 — see Failures.md. Verify with GET
+    # https://integrate.api.nvidia.com/v1/models before assuming any
+    # model id here is still current; NIM's catalog changes without notice.
+    llm_fallback: str = "openai/gpt-oss-20b"
     llm_timeout_seconds: float = 30.0
     llm_max_retries: int = 2
     llm_retry_backoff_seconds: float = 1.0
@@ -95,6 +99,17 @@ class Settings(BaseSettings):
     chaos_fault: str = ""
     llm_circuit_breaker_failure_threshold: int = 3
     llm_circuit_breaker_cooldown_seconds: float = 30.0
+
+    # --- Layer 4.8: demand-signal loop ---
+    # Shared by every "N+ distinct buyers/sessions" notification (unmet
+    # demand, browse abandonment, out-of-stock demand, attribute gap) — one
+    # mental model, one tested helper (app/demand/aggregation.py::
+    # crosses_threshold). Percentage of *active buyers* (real BUYER-role
+    # Users with at least one AgentSession), with an absolute floor so a
+    # tiny active-buyer count near the start of a demo can never trigger a
+    # notification off one or two people.
+    demand_notification_threshold_pct: float = 0.20
+    demand_notification_threshold_floor: int = 5
 
     # --- Layer 4.7: principals (buyer/merchant Google OAuth, agent credentials) ---
     google_client_id: str = ""

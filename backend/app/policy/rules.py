@@ -54,6 +54,32 @@ class UnknownSkuRule(Rule):
         return None
 
 
+class OutOfStockRule(Rule):
+    """A specific, honest reason ("this is out of stock") for the one case
+    that's actually a merchant decision ("Toggle out-of-stock" on the
+    dashboard — see app/routers/merchant.py), distinct from StockRule below,
+    which is about a *quantity* exceeding whatever's left. Registered ahead
+    of StockRule so this clearer message wins for the stock==0 case, which
+    StockRule's own `quantity > stock` check would otherwise also catch.
+    A policy rule, not a prompt instruction — see docs/048-demand-loop.md
+    Part 5: the agent must never quietly substitute or retry around this."""
+
+    name = "OutOfStockRule"
+
+    def evaluate(self, action: ProposedCartState) -> RuleResult | None:
+        if action.tool_name not in PRICE_CHECKED_TOOLS:
+            return None
+        if action.product is None:
+            return None
+        if action.product.stock <= 0:
+            return RuleResult(
+                Decision.DENY,
+                self.name,
+                f"SKU '{action.sku}' is currently out of stock.",
+            )
+        return None
+
+
 class StockRule(Rule):
     name = "StockRule"
 

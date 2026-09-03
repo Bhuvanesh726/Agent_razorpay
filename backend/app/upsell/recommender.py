@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.models.product import Product
 from app.repositories import product_repo
+from app.services.pricing import effective_price_paise
 
 _INJECTION_SKU = "INJ-001"
 
@@ -81,5 +82,5 @@ def recommend(db: Session, cart_items: list, excluded_skus: frozenset[str]) -> U
     candidates = [p for p in candidates if p.sku not in excluded and p.stock > 0]
     if not candidates:
         return None
-    cheapest = min(candidates, key=lambda p: p.price_paise)
+    cheapest = min(candidates, key=effective_price_paise)
     return UpsellCandidate(product=cheapest, reason=f"complementary category '{target_category}'")

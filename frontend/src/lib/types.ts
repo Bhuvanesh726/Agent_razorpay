@@ -4,8 +4,13 @@ export interface Product {
   name: string;
   brand: string;
   category: string;
+  // Always the list price. What a buyer pays is effective_price_paise below.
   price_paise: number;
   price_display: string;
+  // None = no active discount, set via the merchant dashboard.
+  discount_pct: number | null;
+  effective_price_paise: number;
+  effective_price_display: string;
   unit: string;
   stock: number;
   description: string;
@@ -207,11 +212,16 @@ export interface ContentGap {
 }
 
 export interface MeResponse {
-  type: "buyer" | "merchant" | "agent";
+  type: "buyer" | "merchant" | "agent" | "pending";
   user_id: string;
   email: string | null;
   role: "BUYER" | "MERCHANT" | null;
   credential_id: string | null;
+}
+
+export interface RoleChoiceResult {
+  role: string;
+  token: string;
 }
 
 export interface AgentCreateRequest {
@@ -254,4 +264,60 @@ export interface AgentAction {
 
 export interface AgentDetail extends AgentSummary {
   recent_actions: AgentAction[];
+}
+
+// --- Layer 4.8: buyer dashboard ---
+
+export interface AgentSummaryLite {
+  id: string;
+  name: string;
+  status: string;
+  delivery_mode: string;
+}
+
+export interface OrderSummary {
+  id: number;
+  amount_paise: number;
+  status: string;
+  created_at: string;
+}
+
+export interface DashboardSummary {
+  agent: AgentSummaryLite | null;
+  agent_count: number;
+  recent_orders: OrderSummary[];
+  cart: Cart;
+}
+
+// --- Layer 4.8: merchant dashboard ---
+
+export interface MerchantNotification {
+  id: number;
+  created_at: string;
+  type: "UNMET_DEMAND" | "OUT_OF_STOCK_DEMAND" | "BROWSE_ABANDONMENT" | "ATTRIBUTE_GAP";
+  evidence: Record<string, unknown>;
+  suggested_action: string;
+  status: "NEW" | "ACTED" | "DISMISSED";
+  acted_at: string | null;
+  dismissed_at: string | null;
+  conversions_since_acted: number;
+}
+
+export interface MerchantProductRow {
+  sku: string;
+  name: string;
+  category: string;
+  price_paise: number;
+  discount_pct: number | null;
+  effective_price_paise: number;
+  stock: number;
+  is_out_of_stock: boolean;
+}
+
+export interface HeadlineNumbers {
+  queries_received: number;
+  match_rate: number;
+  unmet_demand_count: number;
+  upsell_revenue_paise: number;
+  campaign_net_margin_impact_paise: number;
 }

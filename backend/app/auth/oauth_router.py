@@ -91,8 +91,11 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         if user is None:
             user = db.query(User).filter(User.email == email).first()
         if user is None:
-            role = "MERCHANT" if email.lower() in settings.merchant_email_set else "BUYER"
-            user = User(id=f"google_{sub}", email=email, name=name, google_sub=sub, role=role)
+            # No role assigned here — Layer 4.8 replaced the MERCHANT_EMAILS
+            # allowlist entirely with an explicit /onboarding choice. role
+            # stays None (PrincipalType "pending") until the user picks one;
+            # see app/auth/onboarding_router.py.
+            user = User(id=f"google_{sub}", email=email, name=name, google_sub=sub, role=None)
             db.add(user)
         else:
             user.google_sub = sub
@@ -127,7 +130,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/api/auth/me")
-@requires(AuthRequirement.BUYER, AuthRequirement.MERCHANT, AuthRequirement.AGENT)
+@requires(AuthRequirement.BUYER, AuthRequirement.MERCHANT, AuthRequirement.AGENT, AuthRequirement.PENDING)
 def get_me(principal: Principal = Depends(get_principal)) -> dict:
     return {
         "type": principal.type,

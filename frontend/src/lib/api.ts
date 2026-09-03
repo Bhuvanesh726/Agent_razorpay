@@ -10,9 +10,14 @@ import type {
   Cart,
   Category,
   ContentGap,
+  DashboardSummary,
+  HeadlineNumbers,
   MeResponse,
+  MerchantNotification,
+  MerchantProductRow,
   PaymentResult,
   ProductListResponse,
+  RoleChoiceResult,
   Segment,
   SessionReplay,
 } from "./types";
@@ -208,4 +213,68 @@ export function revokeAgent(credentialId: string): Promise<AgentSummary> {
 
 export function runAgent(credentialId: string): Promise<{ reply: string; status: string; cart: Cart }> {
   return request(`/api/agents/${credentialId}/run`, { method: "POST" }, AGENT_REQUEST_TIMEOUT_MS);
+}
+
+// --- Layer 4.8: onboarding + dev role switch ---
+
+export function chooseRole(role: "BUYER" | "MERCHANT"): Promise<RoleChoiceResult> {
+  return request<RoleChoiceResult>("/api/onboarding/role", {
+    method: "POST",
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function devSwitchRole(role: "BUYER" | "MERCHANT"): Promise<RoleChoiceResult> {
+  return request<RoleChoiceResult>("/api/dev/switch-role", {
+    method: "POST",
+    body: JSON.stringify({ role }),
+  });
+}
+
+// --- Layer 4.8: buyer dashboard ---
+
+export function fetchDashboardSummary(): Promise<DashboardSummary> {
+  return request<DashboardSummary>("/api/dashboard/summary");
+}
+
+// --- Layer 4.8: merchant dashboard ---
+
+export function fetchMerchantNotifications(): Promise<MerchantNotification[]> {
+  return request<MerchantNotification[]>("/api/merchant/notifications");
+}
+
+export function actOnNotification(
+  id: number,
+  status: "ACTED" | "DISMISSED"
+): Promise<MerchantNotification> {
+  return request<MerchantNotification>(`/api/merchant/notifications/${id}/action`, {
+    method: "POST",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function fetchMerchantProducts(): Promise<MerchantProductRow[]> {
+  return request<MerchantProductRow[]>("/api/merchant/products");
+}
+
+export function setProductPrice(sku: string, pricePaise: number): Promise<MerchantProductRow> {
+  return request<MerchantProductRow>(`/api/merchant/products/${sku}/price`, {
+    method: "POST",
+    body: JSON.stringify({ price_paise: pricePaise }),
+  });
+}
+
+export function setProductDiscount(sku: string, discountPct: number | null): Promise<MerchantProductRow> {
+  return request<MerchantProductRow>(`/api/merchant/products/${sku}/discount`, {
+    method: "POST",
+    body: JSON.stringify({ discount_pct: discountPct }),
+  });
+}
+
+export function toggleProductStock(sku: string): Promise<MerchantProductRow> {
+  return request<MerchantProductRow>(`/api/merchant/products/${sku}/toggle-stock`, { method: "POST" });
+}
+
+export function fetchHeadlineNumbers(): Promise<HeadlineNumbers> {
+  return request<HeadlineNumbers>("/api/merchant/headline");
 }

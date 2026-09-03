@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createAgent, fetchAgent, fetchAgents, revokeAgent, runAgent } from "@/lib/api";
 import type { AgentAction, AgentCreateResponse, AgentDetail, AgentSummary } from "@/lib/types";
 import RequireAuth from "@/components/RequireAuth";
+import FloatingChatLauncher from "@/components/FloatingChatLauncher";
 
 // Mirrors backend/app/core/config.py's agent_available_scopes default — the
 // backend is the actual source of truth and rejects anything outside its
@@ -401,6 +402,7 @@ function AgentsPageInner() {
       </div>
 
       {revealAgent && <KeyRevealDialog agent={revealAgent} onClose={() => setRevealAgent(null)} />}
+      <FloatingChatLauncher />
     </div>
   );
 }

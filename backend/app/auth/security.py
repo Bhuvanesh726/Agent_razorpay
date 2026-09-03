@@ -30,7 +30,7 @@ def hash_agent_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
 
-def create_access_token(*, sub: str, email: str, role: str) -> str:
+def create_access_token(*, sub: str, email: str, role: str | None) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": sub,
