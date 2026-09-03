@@ -20,6 +20,9 @@ frontend/next-env.d.ts
 # Logs
 *.log
 
+# Local-only failure/debug notes — not part of the project's committed history
+Failures.md
+
 # Editors / OS
 .vscode/
 .idea/

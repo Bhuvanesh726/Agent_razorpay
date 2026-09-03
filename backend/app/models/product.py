@@ -21,6 +21,9 @@ class Product(Base):
     brand: Mapped[str] = mapped_column(String(120), nullable=False)
     category: Mapped[str] = mapped_column(String(60), nullable=False)
     price_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Cost basis for MarginFloorRule (Layer 4.6) — never shown to a shopper,
+    # only used to keep a campaign discount from selling below a floor margin.
+    cost_paise: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     unit: Mapped[str] = mapped_column(String(60), nullable=False)
     stock: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")

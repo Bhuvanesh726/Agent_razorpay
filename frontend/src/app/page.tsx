@@ -74,9 +74,14 @@ export default function Home() {
             Browse and add manually, or ask the assistant. Every money action it takes is policy-gated and logged.
           </p>
         </div>
-        <a href="/audit" className="text-sm text-gray-500 underline hover:text-gray-800">
-          Audit trail viewer →
-        </a>
+        <div className="flex gap-4">
+          <a href="/campaigns" className="text-sm text-gray-500 underline hover:text-gray-800">
+            Campaigns →
+          </a>
+          <a href="/audit" className="text-sm text-gray-500 underline hover:text-gray-800">
+            Audit trail viewer →
+          </a>
+        </div>
       </header>
 
       {error && (

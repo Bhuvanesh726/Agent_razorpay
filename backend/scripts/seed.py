@@ -34,6 +34,7 @@ def main() -> None:
                     "brand": entry["brand"],
                     "category": entry["category"],
                     "price_paise": entry["price_paise"],
+                    "cost_paise": entry["cost_paise"],
                     "unit": entry["unit"],
                     "stock": entry["stock"],
                     "description": entry["description"],

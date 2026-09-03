@@ -1,10 +1,13 @@
 import type {
   AgentChatResponse,
   AuditTrail,
+  CampaignDetail,
+  CampaignSummary,
   Cart,
   Category,
   PaymentResult,
   ProductListResponse,
+  Segment,
   SessionReplay,
 } from "./types";
 
@@ -125,6 +128,18 @@ export function verifyPayment(
       razorpay_signature: razorpaySignature,
     }),
   });
+}
+
+export function fetchSegments(): Promise<Segment[]> {
+  return request<Segment[]>("/api/campaigns/segments");
+}
+
+export function fetchCampaigns(): Promise<CampaignSummary[]> {
+  return request<CampaignSummary[]>("/api/campaigns");
+}
+
+export function fetchCampaign(campaignId: string): Promise<CampaignDetail> {
+  return request<CampaignDetail>(`/api/campaigns/${campaignId}`);
 }
 
 export function reportPaymentFailed(

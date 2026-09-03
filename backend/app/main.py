@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import RequestLoggingMiddleware, configure_logging
-from app.routers import agent, audit, cart, catalog, health, payments, products
+from app.routers import agent, audit, campaigns, cart, catalog, health, payments, products
 from app.testing.chaos import ChaosHeaderMiddleware
 
 configure_logging()
@@ -27,3 +27,4 @@ app.include_router(agent.router)
 app.include_router(audit.router)
 app.include_router(payments.router)
 app.include_router(catalog.router)
+app.include_router(campaigns.router)

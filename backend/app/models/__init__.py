@@ -1,3 +1,11 @@
+from app.campaigns.models import (
+    CampaignOffer,
+    CampaignRun,
+    Customer,
+    GenerationMeta,
+    HistoricalOrder,
+    HistoricalOrderItem,
+)
 from app.models.agent_session import AgentMessage, AgentSession
 from app.models.audit_event import AuditEvent
 from app.models.cart import Cart, CartItem
@@ -13,4 +21,10 @@ __all__ = [
     "AuditEvent",
     "Order",
     "Payment",
+    "GenerationMeta",
+    "Customer",
+    "HistoricalOrder",
+    "HistoricalOrderItem",
+    "CampaignRun",
+    "CampaignOffer",
 ]

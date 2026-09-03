@@ -48,6 +48,29 @@ class Settings(BaseSettings):
     policy_upsell_max_per_session: int = 1  # how many upsell offers this session will ever see, regardless of outcome
     policy_upsell_max_pct_of_cart: float = 0.50  # an offer priced above this fraction of the original cart value is blocked
 
+    # --- Layer 4.6: campaign orchestrator ---
+    # Segmentation thresholds (deterministic, no LLM — app/campaigns/segmentation.py)
+    campaign_lapsed_days: int = 90
+    campaign_repeat_min_orders: int = 3
+    campaign_high_value_threshold_paise: int = 200_000  # ₹2,000 lifetime spend
+    campaign_category_loyal_min_share: float = 0.6
+
+    # Offer policy — merchant-wide constants, never overridable by a campaign proposal
+    campaign_max_discount_pct: float = 0.30  # ₹ off must never exceed 30% of list price
+    campaign_min_margin_pct: float = 0.15  # discounted price must clear cost by at least 15%
+
+    # Per-campaign-run parameters, resolved once from config before any offer is evaluated
+    campaign_default_budget_paise: int = 300_000  # ₹3,000 max total giveaway per campaign
+    campaign_min_segment_size: int = 5  # refuse to run a campaign on a smaller segment
+    campaign_max_offers_per_window: int = 1  # a customer may be targeted this many times per window
+    campaign_offer_frequency_window_days: int = 30
+
+    # Control group + simulated redemption (see docs/046-campaigns.md — this
+    # whole block is a documented, explicit toy assumption, never observed data)
+    campaign_control_group_fraction: float = 0.25
+    campaign_base_organic_conversion_rate: float = 0.05  # baseline chance ANY customer buys the featured product anyway
+    campaign_discount_lift_sensitivity: float = 0.6  # extra conversion-probability points per 1.0 (100%) of discount_pct
+
     # --- Layer 3: chaos injection + resilience ---
     # A global, sticky fault for a demo segment (e.g. CHAOS_FAULT=SLOW_LLM).
     # Empty = off. Overridable per-request via the X-Chaos-Fault header.

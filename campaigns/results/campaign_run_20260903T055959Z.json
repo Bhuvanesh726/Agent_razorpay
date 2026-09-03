@@ -1,0 +1,196 @@
+{
+  "meta": {
+    "seed": 42,
+    "as_of": "2026-09-03T05:58:40",
+    "n_customers": 20,
+    "n_orders": 76,
+    "timestamp": "2026-09-03T05:59:59.745064+00:00"
+  },
+  "segments": {
+    "lapsed": {
+      "size": 8,
+      "description": "No order in the last 90+ days"
+    },
+    "repeat": {
+      "size": 10,
+      "description": "3+ lifetime orders"
+    },
+    "high_value": {
+      "size": 14,
+      "description": "Lifetime spend >= ₹2000.00"
+    },
+    "category_loyal": {
+      "size": 7,
+      "description": "60%+ of orders in one category"
+    },
+    "one_time": {
+      "size": 4,
+      "description": "Exactly one lifetime order"
+    }
+  },
+  "results": [
+    {
+      "campaign_id": "camp-lapsed-7ea729e5",
+      "segment_name": "lapsed",
+      "status": "completed",
+      "reason": null,
+      "proposal": {
+        "skus": [
+          "CHO-001",
+          "DRI-001",
+          "PET-001"
+        ],
+        "discount_pct": 0.1,
+        "message": "Welcome back! Enjoy 10% off on Cadbury Dairy Milk, Coca‑Cola, and Pedigree dog food – a little treat to get you ordering again.",
+        "rationale": "Lapsed customers can be re‑engaged with a modest 10% discount on their top‑category favourites—chocolates, cool drinks, and pet supplies—prompting a return purchase.",
+        "model_used": "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "fallback_used": false,
+        "prompt_tokens": 3146,
+        "completion_tokens": 676,
+        "total_tokens": 3822,
+        "cost_paise": 0,
+        "latency_ms": 18828
+      },
+      "measurement": {
+        "segment_size": 8,
+        "offers_sent": 6,
+        "offers_blocked": 0,
+        "control_size": 2,
+        "redemptions": 3,
+        "treatment_revenue_paise": 51300,
+        "control_revenue_paise": 0,
+        "control_conversion_rate": 0.0,
+        "expected_baseline_revenue_paise": 0,
+        "incremental_revenue_paise": 51300,
+        "discount_cost_paise": 5700,
+        "treatment_cogs_paise": 38760,
+        "expected_baseline_cogs_paise": 0,
+        "net_margin_impact_paise": 12540
+      }
+    },
+    {
+      "campaign_id": "camp-repeat-ccf51f07",
+      "segment_name": "repeat",
+      "status": "completed",
+      "reason": null,
+      "proposal": {
+        "skus": [
+          "CHO-001",
+          "GRO-001",
+          "ICE-001"
+        ],
+        "discount_pct": 0.1,
+        "message": "Thank you for being a valued repeat customer! Enjoy 10% off on Cadbury Dairy Milk, Aashirvaad Atta, or Amul Vanilla Ice Cream.",
+        "rationale": "Repeat shoppers with high lifetime value appreciate modest discounts on core categories they purchase regularly.",
+        "model_used": "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "fallback_used": false,
+        "prompt_tokens": 3150,
+        "completion_tokens": 684,
+        "total_tokens": 3834,
+        "cost_paise": 0,
+        "latency_ms": 16157
+      },
+      "measurement": {
+        "segment_size": 10,
+        "offers_sent": 7,
+        "offers_blocked": 1,
+        "control_size": 2,
+        "redemptions": 2,
+        "treatment_revenue_paise": 49500,
+        "control_revenue_paise": 0,
+        "control_conversion_rate": 0.0,
+        "expected_baseline_revenue_paise": 0,
+        "incremental_revenue_paise": 49500,
+        "discount_cost_paise": 5500,
+        "treatment_cogs_paise": 37284,
+        "expected_baseline_cogs_paise": 0,
+        "net_margin_impact_paise": 12216
+      }
+    },
+    {
+      "campaign_id": "camp-high_value-a8a50433",
+      "segment_name": "high_value",
+      "status": "completed",
+      "reason": null,
+      "proposal": {
+        "skus": [
+          "CHO-003",
+          "DRI-005",
+          "DAI-006"
+        ],
+        "discount_pct": 0.1,
+        "message": "Get 10% off premium Ferrero Rocher, Red Bull and Amul Ghee – a thank‑you gift from us to you!",
+        "rationale": "High‑value customers appreciate premium food and beverage items, and a modest 10% discount encourages repeat purchases without eroding margins.",
+        "model_used": "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "fallback_used": false,
+        "prompt_tokens": 3170,
+        "completion_tokens": 1133,
+        "total_tokens": 4303,
+        "cost_paise": 0,
+        "latency_ms": 25821
+      },
+      "measurement": {
+        "segment_size": 14,
+        "offers_sent": 2,
+        "offers_blocked": 8,
+        "control_size": 4,
+        "redemptions": 1,
+        "treatment_revenue_paise": 67410,
+        "control_revenue_paise": 74900,
+        "control_conversion_rate": 0.25,
+        "expected_baseline_revenue_paise": 37450,
+        "incremental_revenue_paise": 29960,
+        "discount_cost_paise": 7490,
+        "treatment_cogs_paise": 44497,
+        "expected_baseline_cogs_paise": 22248,
+        "net_margin_impact_paise": 7711
+      }
+    },
+    {
+      "campaign_id": "camp-category_loyal-9b345406",
+      "segment_name": "category_loyal",
+      "status": "completed",
+      "reason": null,
+      "proposal": {
+        "skus": [
+          "CHO-001",
+          "CHO-002"
+        ],
+        "discount_pct": 0.1,
+        "message": "Loyal chocolate lovers, enjoy 10% off our finest Cadbury and Amul picks!",
+        "rationale": "This segment spends heavily in chocolates, so a modest 10% discount on best‑selling chocolate SKUs aligns with their preferences and encourages repeat purchases.",
+        "model_used": "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "fallback_used": false,
+        "prompt_tokens": 3148,
+        "completion_tokens": 751,
+        "total_tokens": 3899,
+        "cost_paise": 0,
+        "latency_ms": 17045
+      },
+      "measurement": {
+        "segment_size": 7,
+        "offers_sent": 1,
+        "offers_blocked": 4,
+        "control_size": 2,
+        "redemptions": 0,
+        "treatment_revenue_paise": 0,
+        "control_revenue_paise": 0,
+        "control_conversion_rate": 0.0,
+        "expected_baseline_revenue_paise": 0,
+        "incremental_revenue_paise": 0,
+        "discount_cost_paise": 0,
+        "treatment_cogs_paise": 0,
+        "expected_baseline_cogs_paise": 0,
+        "net_margin_impact_paise": 0
+      }
+    },
+    {
+      "campaign_id": "camp-one_time-00b37da8",
+      "segment_name": "one_time",
+      "status": "blocked_at_segment",
+      "reason": "Segment 'one_time' has only 4 member(s), below the minimum of 5 needed to draw a reliable conclusion — refusing to run.",
+      "proposal": null,
+      "measurement": null
+    }
+  ]
+}

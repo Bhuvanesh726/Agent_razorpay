@@ -143,3 +143,58 @@ export interface SessionReplay {
   final_cart: Cart | null;
   final_order_status: string | null;
 }
+
+export interface Segment {
+  name: string;
+  description: string;
+  size: number;
+}
+
+export interface CampaignProposal {
+  skus: string[];
+  discount_pct: number;
+  message: string;
+  rationale: string;
+}
+
+export interface CampaignMeasurement {
+  segment_size: number;
+  offers_sent: number;
+  offers_blocked: number;
+  control_size: number;
+  redemptions: number;
+  treatment_revenue_paise: number;
+  control_revenue_paise: number;
+  control_conversion_rate: number;
+  expected_baseline_revenue_paise: number;
+  incremental_revenue_paise: number;
+  discount_cost_paise: number;
+  treatment_cogs_paise: number;
+  expected_baseline_cogs_paise: number;
+  net_margin_impact_paise: number;
+}
+
+export interface CampaignSummary {
+  campaign_id: string;
+  segment_name: string;
+  status: string;
+  created_at: string;
+  proposal: CampaignProposal | null;
+  measurement: CampaignMeasurement | null;
+}
+
+export interface CampaignOffer {
+  customer_key: string;
+  group: "treatment" | "control";
+  decision: "ALLOW" | "DENY" | null;
+  rule_name: string | null;
+  reason: string | null;
+  discount_pct: number | null;
+  redeemed: boolean;
+  revenue_paise: number;
+  cogs_paise: number;
+}
+
+export interface CampaignDetail extends CampaignSummary {
+  offers: CampaignOffer[];
+}
