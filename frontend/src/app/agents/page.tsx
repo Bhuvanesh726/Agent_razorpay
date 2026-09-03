@@ -1,11 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { Bot, KeyRound, Play, ShieldOff } from "lucide-react";
 import { createAgent, fetchAgent, fetchAgents, revokeAgent, runAgent } from "@/lib/api";
 import type { AgentAction, AgentCreateResponse, AgentDetail, AgentSummary } from "@/lib/types";
 import RequireAuth from "@/components/RequireAuth";
 import FloatingChatLauncher from "@/components/FloatingChatLauncher";
+import Button from "@/components/ui/Button";
+import { StatusBadge } from "@/components/ui/Badge";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
+import { Input, Label, Textarea } from "@/components/ui/Input";
+import Modal from "@/components/ui/Modal";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Table, TableWrap, THead, Th, Tr, Td } from "@/components/ui/Table";
 
 // Mirrors backend/app/core/config.py's agent_available_scopes default — the
 // backend is the actual source of truth and rejects anything outside its
@@ -26,31 +34,25 @@ function rupees(paise: number): string {
   return `₹${(paise / 100).toFixed(2)}`;
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const cls = status === "ACTIVE" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800";
-  return <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>{status}</span>;
-}
-
 function KeyRevealDialog({ agent, onClose }: { agent: AgentCreateResponse; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-semibold">Save this key now</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          &ldquo;{agent.name}&rdquo; is an <strong>external</strong> agent credential. This key is shown{" "}
-          <strong>exactly once</strong> — it is hashed at rest and cannot be recovered after you close this dialog.
-          Configure it wherever the external agent runs (e.g. <code>AGENT_API_KEY</code> for{" "}
-          <code>buyer_agent/</code>).
-        </p>
-        <pre className="mt-3 overflow-x-auto rounded-md bg-gray-900 p-3 text-xs text-green-300">{agent.key}</pre>
-        <button
-          onClick={onClose}
-          className="mt-4 w-full rounded-md bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
-        >
-          I&rsquo;ve saved it
-        </button>
+    <Modal onClose={onClose}>
+      <div className="flex items-center gap-2">
+        <KeyRound size={17} className="text-warning" />
+        <h2 className="text-lg font-semibold tracking-tight text-ink">Save this key now</h2>
       </div>
-    </div>
+      <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+        &ldquo;{agent.name}&rdquo; is an <strong className="text-ink">external</strong> agent credential. This key
+        is shown <strong className="text-ink">exactly once</strong> — it is hashed at rest and cannot be recovered
+        after you close this dialog. Configure it wherever the external agent runs (e.g.{" "}
+        <code className="rounded bg-black/[0.04] px-1 py-0.5 font-mono text-[13px]">AGENT_API_KEY</code> for{" "}
+        <code className="rounded bg-black/[0.04] px-1 py-0.5 font-mono text-[13px]">buyer_agent/</code>).
+      </p>
+      <pre className="mt-3 overflow-x-auto rounded-md bg-ink p-3 font-mono text-xs text-white">{agent.key}</pre>
+      <Button variant="primary" onClick={onClose} className="mt-4 w-full justify-center">
+        I&rsquo;ve saved it
+      </Button>
+    </Modal>
   );
 }
 
@@ -100,114 +102,109 @@ function CreateAgentForm({ onCreated }: { onCreated: (agent: AgentCreateResponse
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-gray-200 p-4">
-      <h2 className="font-semibold">Create an agent</h2>
+    <Card>
+      <CardHeader>
+        <CardTitle>Create an agent</CardTitle>
+      </CardHeader>
+      <form onSubmit={handleSubmit}>
+        <CardBody className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5">
+            <Label>Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Weekly groceries" />
+          </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        Name
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Weekly groceries"
-          className="rounded-md border border-gray-300 px-3 py-2"
-        />
-      </label>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-0.5 text-sm font-medium text-ink">Delivery mode</legend>
+            {(
+              [
+                {
+                  value: "EMBEDDED" as const,
+                  label: "Embedded",
+                  desc: "Runs from this UI. The key is generated and hashed on the server; it is never shown to anyone, including you.",
+                },
+                {
+                  value: "EXTERNAL" as const,
+                  label: "External",
+                  desc: (
+                    <>
+                      For a third-party integration (e.g. <code className="font-mono text-xs">buyer_agent/</code>).
+                      The key is shown once, right after you create it, for you to configure elsewhere.
+                    </>
+                  ),
+                },
+              ] as const
+            ).map((opt) => (
+              <label
+                key={opt.value}
+                className={`flex cursor-pointer items-start gap-2.5 rounded-md border p-3 text-sm transition-colors duration-150 ${
+                  deliveryMode === opt.value ? "border-accent bg-accent-soft" : "border-line hover:border-line-strong"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="delivery-mode"
+                  checked={deliveryMode === opt.value}
+                  onChange={() => setDeliveryMode(opt.value)}
+                  className="mt-0.5 accent-accent"
+                />
+                <span>
+                  <strong className="text-ink">{opt.label}</strong>
+                  <span className="block text-ink-soft">{opt.desc}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
 
-      <fieldset className="flex flex-col gap-1 text-sm">
-        <legend className="mb-1">Delivery mode</legend>
-        <label className="flex items-start gap-2">
-          <input
-            type="radio"
-            name="delivery-mode"
-            checked={deliveryMode === "EMBEDDED"}
-            onChange={() => setDeliveryMode("EMBEDDED")}
-            className="mt-0.5"
-          />
-          <span>
-            <strong>Embedded</strong> — runs from this UI. The key is generated and hashed on the server; it is
-            never shown to anyone, including you.
-          </span>
-        </label>
-        <label className="flex items-start gap-2">
-          <input
-            type="radio"
-            name="delivery-mode"
-            checked={deliveryMode === "EXTERNAL"}
-            onChange={() => setDeliveryMode("EXTERNAL")}
-            className="mt-0.5"
-          />
-          <span>
-            <strong>External</strong> — for a third-party integration (e.g. <code>buyer_agent/</code>). The key is
-            shown once, right after you create it, for you to configure elsewhere.
-          </span>
-        </label>
-      </fieldset>
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="mb-0.5 text-sm font-medium text-ink">Scopes — which tools this agent may call</legend>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {AVAILABLE_SCOPES.map((scope) => (
+                <label key={scope} className="flex items-center gap-1.5 text-sm text-ink-soft">
+                  <input type="checkbox" checked={scopes.has(scope)} onChange={() => toggleScope(scope)} className="accent-accent" />
+                  <span className="font-mono text-xs">{scope}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
-      <fieldset className="flex flex-col gap-1 text-sm">
-        <legend className="mb-1">Scopes — which tools this agent may call</legend>
-        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-          {AVAILABLE_SCOPES.map((scope) => (
-            <label key={scope} className="flex items-center gap-1.5">
-              <input type="checkbox" checked={scopes.has(scope)} onChange={() => toggleScope(scope)} />
-              <span className="font-mono text-xs">{scope}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+          <label className="flex flex-col gap-1.5">
+            <Label>Spend limit (₹) — a hard cap across every run of this credential, independent of any session budget</Label>
+            <Input type="number" min={1} value={spendLimitInput} onChange={(e) => setSpendLimitInput(e.target.value)} className="w-32" />
+          </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        Spend limit (₹) — a hard cap across every run of this credential, independent of any session budget
-        <input
-          type="number"
-          min={1}
-          value={spendLimitInput}
-          onChange={(e) => setSpendLimitInput(e.target.value)}
-          className="w-32 rounded-md border border-gray-300 px-3 py-2"
-        />
-      </label>
+          <label className="flex flex-col gap-1.5">
+            <Label>Standing instruction (used by &ldquo;Run now&rdquo; for an embedded agent — plain language)</Label>
+            <Textarea
+              value={standingInstruction}
+              onChange={(e) => setStandingInstruction(e.target.value)}
+              placeholder="e.g. Buy a 5kg bag of atta if it's under ₹300 and in stock."
+              rows={2}
+            />
+          </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        Standing instruction (used by &ldquo;Run now&rdquo; for an embedded agent — plain language)
-        <textarea
-          value={standingInstruction}
-          onChange={(e) => setStandingInstruction(e.target.value)}
-          placeholder="e.g. Buy a 5kg bag of atta if it's under ₹300 and in stock."
-          rows={2}
-          className="rounded-md border border-gray-300 px-3 py-2"
-        />
-      </label>
+          {error && <div className="rounded-lg border border-danger/25 bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>}
 
-      {error && <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
-
-      <button
-        type="submit"
-        disabled={submitting}
-        className="self-start rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
-      >
-        {submitting ? "Creating…" : "Create agent"}
-      </button>
-    </form>
+          <Button type="submit" variant="primary" disabled={submitting} className="self-start">
+            {submitting ? "Creating…" : "Create agent"}
+          </Button>
+        </CardBody>
+      </form>
+    </Card>
   );
 }
 
 function AgentActionRow({ action }: { action: AgentAction }) {
-  const decisionCls =
-    action.decision === "DENY"
-      ? "text-red-600"
-      : action.decision === "REQUIRE_CONFIRMATION"
-        ? "text-amber-600"
-        : "text-green-600";
   return (
-    <tr className="border-t border-gray-100 align-top">
-      <td className="p-1.5 whitespace-nowrap text-xs text-gray-400">{new Date(action.timestamp + "Z").toLocaleString()}</td>
-      <td className="p-1.5 whitespace-nowrap text-xs">{action.event_type}</td>
-      <td className="p-1.5 whitespace-nowrap text-xs">{action.tool_name ?? "—"}</td>
-      <td className="p-1.5 whitespace-nowrap text-xs">
-        {action.decision ? <span className={decisionCls}>{action.decision}</span> : "—"}
-      </td>
-      <td className="p-1.5 whitespace-nowrap text-xs">{action.rule_name ?? "—"}</td>
-      <td className="p-1.5 text-xs text-gray-600">{action.reason ?? "—"}</td>
-    </tr>
+    <Tr>
+      <Td className="whitespace-nowrap text-ink-faint">{new Date(action.timestamp + "Z").toLocaleString()}</Td>
+      <Td className="whitespace-nowrap font-mono">{action.event_type}</Td>
+      <Td className="whitespace-nowrap">{action.tool_name ?? "—"}</Td>
+      <Td className="whitespace-nowrap">
+        <StatusBadge status={action.decision} />
+      </Td>
+      <Td className="whitespace-nowrap text-ink-soft">{action.rule_name ?? "—"}</Td>
+      <Td className="text-ink-soft">{action.reason ?? "—"}</Td>
+    </Tr>
   );
 }
 
@@ -264,91 +261,93 @@ function AgentCard({ agent, onChanged }: { agent: AgentSummary; onChanged: () =>
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="font-medium">{agent.name}</h3>
-            <StatusBadge status={agent.status} />
-            <span className="text-xs text-gray-400">{agent.delivery_mode}</span>
+    <Card className="p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+            <Bot size={17} />
           </div>
-          <p className="mt-1 text-xs text-gray-500">
-            Spent {rupees(agent.spent_paise)} of {rupees(agent.spend_limit_paise)} limit · Last active{" "}
-            {agent.last_used_at ? new Date(agent.last_used_at + "Z").toLocaleString() : "never"} · Created{" "}
-            {new Date(agent.created_at + "Z").toLocaleDateString()}
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {agent.scopes.map((s) => (
-              <span key={s} className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-600">
-                {s}
-              </span>
-            ))}
-          </div>
-          {agent.standing_instruction && (
-            <p className="mt-1.5 text-xs text-gray-500">
-              Standing instruction: <span className="italic">&ldquo;{agent.standing_instruction}&rdquo;</span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-medium text-ink">{agent.name}</h3>
+              <StatusBadge status={agent.status} />
+              <span className="font-mono text-[11px] uppercase tracking-wide text-ink-faint">{agent.delivery_mode}</span>
+            </div>
+            <p className="mt-1 text-xs text-ink-soft">
+              Spent <span className="font-mono tabular-nums">{rupees(agent.spent_paise)}</span> of{" "}
+              <span className="font-mono tabular-nums">{rupees(agent.spend_limit_paise)}</span> limit · Last active{" "}
+              {agent.last_used_at ? new Date(agent.last_used_at + "Z").toLocaleString() : "never"} · Created{" "}
+              {new Date(agent.created_at + "Z").toLocaleDateString()}
             </p>
-          )}
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {agent.scopes.map((s) => (
+                <span key={s} className="rounded bg-black/[0.04] px-1.5 py-0.5 font-mono text-xs text-ink-soft">
+                  {s}
+                </span>
+              ))}
+            </div>
+            {agent.standing_instruction && (
+              <p className="mt-1.5 text-xs text-ink-soft">
+                Standing instruction: <span className="italic">&ldquo;{agent.standing_instruction}&rdquo;</span>
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="flex shrink-0 gap-2">
           {agent.status === "ACTIVE" && agent.delivery_mode === "EMBEDDED" && agent.standing_instruction && (
-            <button
-              onClick={handleRun}
-              disabled={busy}
-              className="rounded-md bg-black px-3 py-1.5 text-xs text-white disabled:opacity-40"
-            >
+            <Button variant="primary" size="sm" onClick={handleRun} disabled={busy}>
+              <Play size={13} />
               {busy ? "Running…" : "Run now"}
-            </button>
+            </Button>
           )}
           {agent.status === "ACTIVE" && (
-            <button
-              onClick={handleRevoke}
-              disabled={busy}
-              className="rounded-md border border-red-300 px-3 py-1.5 text-xs text-red-700 disabled:opacity-40"
-            >
+            <Button variant="destructive" size="sm" onClick={handleRevoke} disabled={busy}>
+              <ShieldOff size={13} />
               Revoke
-            </button>
+            </Button>
           )}
-          <button onClick={toggleExpand} className="text-xs text-gray-400 underline hover:text-gray-700">
+          <Button variant="ghost" size="sm" onClick={toggleExpand}>
             {expanded ? "Hide" : "Show"} activity
-          </button>
+          </Button>
         </div>
       </div>
 
-      {runReply && (
-        <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 p-2 text-xs text-gray-700">{runReply}</div>
-      )}
-      {error && <div className="mt-2 rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700">{error}</div>}
+      {runReply && <div className="mt-3 rounded-lg border border-line bg-black/[0.02] p-3 text-xs text-ink-soft">{runReply}</div>}
+      {error && <div className="mt-3 rounded-lg border border-danger/25 bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>}
 
       {expanded && (
-        <div className="mt-3 overflow-x-auto rounded-md border border-gray-200">
+        <div className="mt-3">
           {loadingDetail ? (
-            <p className="p-2 text-xs text-gray-400">Loading…</p>
+            <Skeleton className="h-24" />
           ) : !detail || detail.recent_actions.length === 0 ? (
-            <p className="p-2 text-xs text-gray-400">No actions recorded for this credential yet.</p>
+            <p className="rounded-lg border border-line bg-black/[0.015] p-3 text-xs text-ink-faint">
+              No actions recorded for this credential yet.
+            </p>
           ) : (
-            <table className="w-full min-w-[640px] border-collapse text-xs">
-              <thead className="bg-gray-50 text-left text-gray-500">
-                <tr>
-                  <th className="p-1.5">Time</th>
-                  <th className="p-1.5">Event</th>
-                  <th className="p-1.5">Tool</th>
-                  <th className="p-1.5">Decision</th>
-                  <th className="p-1.5">Rule</th>
-                  <th className="p-1.5">Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.recent_actions.map((a, i) => (
-                  <AgentActionRow key={i} action={a} />
-                ))}
-              </tbody>
-            </table>
+            <TableWrap>
+              <Table className="min-w-[640px] text-xs">
+                <THead>
+                  <tr>
+                    <Th>Time</Th>
+                    <Th>Event</Th>
+                    <Th>Tool</Th>
+                    <Th>Decision</Th>
+                    <Th>Rule</Th>
+                    <Th>Reason</Th>
+                  </tr>
+                </THead>
+                <tbody>
+                  {detail.recent_actions.map((a, i) => (
+                    <AgentActionRow key={i} action={a} />
+                  ))}
+                </tbody>
+              </Table>
+            </TableWrap>
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -373,29 +372,27 @@ function AgentsPageInner() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6">
-      <header className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">My agents</h1>
-          <p className="text-sm text-gray-500">
-            Grant, run, observe, and revoke — every agent here is bounded by its own spend limit and scopes,
-            enforced the same way for every call it makes.
-          </p>
-        </div>
-        <Link href="/" className="text-sm text-gray-500 underline hover:text-gray-800">
-          ← Back to shop
-        </Link>
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">My agents</h1>
+        <p className="mt-1 max-w-2xl text-sm text-ink-soft">
+          Grant, run, observe, and revoke — every agent here is bounded by its own spend limit and scopes, enforced
+          the same way for every call it makes.
+        </p>
       </header>
 
-      {error && <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {error && <div className="rounded-lg border border-danger/25 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>}
 
       <CreateAgentForm onCreated={handleCreated} />
 
       <div className="flex flex-col gap-3">
         {loading ? (
-          <p className="text-sm text-gray-500">Loading…</p>
+          <>
+            <Skeleton className="h-28" />
+            <Skeleton className="h-28" />
+          </>
         ) : agents.length === 0 ? (
-          <p className="text-sm text-gray-400">No agents yet — create one above.</p>
+          <EmptyState icon={Bot} title="No agents yet" description="Create one above to get started." />
         ) : (
           agents.map((a) => <AgentCard key={a.id} agent={a} onChanged={refresh} />)
         )}

@@ -5,7 +5,20 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.auth import credentials_router, oauth_router, onboarding_router
 from app.core.config import settings
 from app.core.logging import RequestLoggingMiddleware, configure_logging
-from app.routers import agent, audit, campaigns, cart, catalog, dashboard, health, merchant, payments, products
+from app.routers import (
+    agent,
+    audit,
+    campaigns,
+    cart,
+    catalog,
+    checkout,
+    dashboard,
+    health,
+    merchant,
+    orders,
+    payments,
+    products,
+)
 from app.testing.chaos import ChaosHeaderMiddleware
 
 configure_logging()
@@ -39,3 +52,5 @@ app.include_router(credentials_router.router)
 app.include_router(onboarding_router.router)
 app.include_router(dashboard.router)
 app.include_router(merchant.router)
+app.include_router(checkout.router)
+app.include_router(orders.router)

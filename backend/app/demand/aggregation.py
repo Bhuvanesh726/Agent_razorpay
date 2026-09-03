@@ -25,10 +25,13 @@ from sqlalchemy.orm import Session
 from app.campaigns.models import ProductView
 from app.core.config import settings
 from app.models.agent_session import AgentSession
+from app.models.cart import Cart, CartItem
 from app.models.demand_signal import DemandSignal
 from app.models.merchant_notification import MerchantNotification
+from app.models.order import Order
 from app.models.product import Product
 from app.models.user import User
+from app.orders.state_machine import OrderStatus
 
 
 def crosses_threshold(count: int, active_buyers: int) -> bool:
@@ -227,3 +230,32 @@ def conversions_since(db: Session, category: str | None, sku: str | None, since:
     else:
         return 0
     return db.scalar(stmt) or 0
+
+
+def purchases_since(db: Session, category: str | None, sku: str | None, since: datetime) -> dict:
+    """Same "close the loop" idea as conversions_since, but grounded in
+    actual paid orders and revenue rather than a search-match signal — this
+    is the number that answers "did acting on this notification actually
+    sell anything," not just "did a search find something." Revenue counts
+    only the matching line items within an order, never the whole order
+    total, so an order that also contains unrelated products doesn't
+    overstate this one notification's impact."""
+    stmt = (
+        select(Order.id, CartItem.quantity, CartItem.unit_price_paise)
+        .select_from(Order)
+        .join(Cart, Cart.id == Order.cart_id)
+        .join(CartItem, CartItem.cart_id == Cart.id)
+        .join(Product, Product.id == CartItem.product_id)
+        .where(Order.status == OrderStatus.PAID.value, Order.updated_at >= since)
+    )
+    if sku is not None:
+        stmt = stmt.where(Product.sku == sku)
+    elif category is not None:
+        stmt = stmt.where(Product.category == category)
+    else:
+        return {"count": 0, "revenue_paise": 0}
+
+    rows = db.execute(stmt).all()
+    order_ids = {order_id for order_id, _, _ in rows}
+    revenue_paise = sum(qty * price for _, qty, price in rows)
+    return {"count": len(order_ids), "revenue_paise": revenue_paise}

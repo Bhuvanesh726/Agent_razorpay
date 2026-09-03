@@ -330,6 +330,31 @@ def test_user_cannot_read_another_users_audit_trail(client, session_factory):
     assert other.status_code == 404
 
 
+def test_merchant_can_list_recent_sessions_buyer_cannot(client, session_factory):
+    _make_user(session_factory, user_id="buyer-f", email="f@example.test", role="BUYER")
+    _make_user(session_factory, user_id="merchant-f", email="merchant-f@example.test", role="MERCHANT")
+    token_buyer = _jwt_for("buyer-f", "f@example.test", "BUYER")
+    token_merchant = _jwt_for("merchant-f", "merchant-f@example.test", "MERCHANT")
+
+    with patch("app.agent.harness.gateway.call", side_effect=lambda *a, **k: _final_response("hi")):
+        client.post(
+            "/api/agent/chat",
+            headers={"Authorization": f"Bearer {token_buyer}"},
+            json={"session_id": "sess-listed-f", "message": "hello", "budget_paise": 100_000},
+        )
+
+    denied = client.get("/api/audit/sessions", headers={"Authorization": f"Bearer {token_buyer}"})
+    assert denied.status_code == 403
+
+    listing = client.get("/api/audit/sessions", headers={"Authorization": f"Bearer {token_merchant}"})
+    assert listing.status_code == 200
+    rows = listing.json()
+    matching = [r for r in rows if r["session_id"] == "sess-listed-f"]
+    assert len(matching) == 1
+    assert matching[0]["user_email"] == "f@example.test"
+    assert matching[0]["event_count"] > 0
+
+
 def test_user_cannot_read_another_users_order_via_payments(client, session_factory):
     from app.models.cart import Cart
     from app.models.order import Order

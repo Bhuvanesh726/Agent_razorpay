@@ -54,8 +54,12 @@ def list_notifications(db: Session = Depends(get_db)) -> list[NotificationOut]:
     out = []
     for n in rows:
         conversions = 0
+        purchases = {"count": 0, "revenue_paise": 0}
         if n.status == "ACTED" and n.acted_at is not None:
             conversions = demand_aggregation.conversions_since(
+                db, n.evidence.get("category"), n.evidence.get("sku"), n.acted_at
+            )
+            purchases = demand_aggregation.purchases_since(
                 db, n.evidence.get("category"), n.evidence.get("sku"), n.acted_at
             )
         out.append(
@@ -69,6 +73,8 @@ def list_notifications(db: Session = Depends(get_db)) -> list[NotificationOut]:
                 acted_at=n.acted_at,
                 dismissed_at=n.dismissed_at,
                 conversions_since_acted=conversions,
+                purchases_since_acted=purchases["count"],
+                revenue_since_acted_paise=purchases["revenue_paise"],
             )
         )
     return out

@@ -14,8 +14,14 @@ class NotificationOut(BaseModel):
     dismissed_at: datetime | None
     # Computed at read time from DemandSignal, not stored — see
     # app/demand/aggregation.py::conversions_since. 0 for a NEW/DISMISSED
-    # notification (nothing to measure yet).
+    # notification (nothing to measure yet). A search-match signal, not a
+    # sale — see purchases_since_acted below for the real number.
     conversions_since_acted: int = 0
+    # Computed at read time from actual PAID orders — see
+    # app/demand/aggregation.py::purchases_since. This is the number that
+    # answers "did this actually sell anything," in real revenue.
+    purchases_since_acted: int = 0
+    revenue_since_acted_paise: int = 0
 
 
 class NotificationActionRequest(BaseModel):

@@ -8,6 +8,14 @@ def get_session(db: Session, session_id: str) -> AgentSession | None:
     return db.scalar(select(AgentSession).where(AgentSession.session_id == session_id))
 
 
+def list_recent_sessions(db: Session, *, limit: int = 25) -> list[AgentSession]:
+    """Most-recently-active sessions first — backs the merchant audit
+    viewer's session picker (app/routers/audit.py), so a merchant can find a
+    session to inspect without a buyer having to hand them a session_id."""
+    stmt = select(AgentSession).order_by(AgentSession.updated_at.desc()).limit(limit)
+    return list(db.scalars(stmt))
+
+
 def get_or_create_session(
     db: Session, session_id: str, user_id: str, budget_paise: int | None
 ) -> AgentSession:

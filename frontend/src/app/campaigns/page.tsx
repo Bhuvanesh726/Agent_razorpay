@@ -1,24 +1,26 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Megaphone } from "lucide-react";
 import { fetchCampaign, fetchCampaigns, fetchContentGaps, fetchSegments } from "@/lib/api";
 import type { CampaignDetail, CampaignSummary, ContentGap, Segment } from "@/lib/types";
 import RequireAuth from "@/components/RequireAuth";
+import { StatusBadge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
+import MetricCard from "@/components/ui/MetricCard";
+import { Table, TableWrap, THead, Th, Tr, Td } from "@/components/ui/Table";
 
 function paise(p: number): string {
   return `₹${(p / 100).toFixed(2)}`;
 }
 
 function MarginImpact({ paise: p }: { paise: number }) {
-  const cls = p < 0 ? "text-red-600" : p > 0 ? "text-green-600" : "text-gray-500";
-  return <span className={`font-medium ${cls}`}>{paise(p)}</span>;
+  const cls = p < 0 ? "text-danger" : p > 0 ? "text-success" : "text-ink-soft";
+  return <span className={`font-mono tabular-nums ${cls}`}>{paise(p)}</span>;
 }
 
-function DecisionBadge({ decision }: { decision: string | null }) {
-  if (!decision) return <span className="text-gray-300">—</span>;
-  const style = decision === "DENY" ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800";
-  return <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${style}`}>{decision}</span>;
+function SkeletonBlock({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded-md bg-black/[0.04] ${className}`} />;
 }
 
 function CampaignsPageInner() {
@@ -54,130 +56,160 @@ function CampaignsPageInner() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
-      <header className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Campaigns</h1>
-          <p className="text-sm text-gray-500">
-            Every number here is either a real deterministic computation (segments, policy decisions) or an
-            explicitly simulated one (redemption, revenue) — see docs/046-campaigns.md. Run{" "}
-            <code className="rounded bg-gray-100 px-1">python campaigns/run.py</code> to generate history and
-            campaigns.
-          </p>
-        </div>
-        <Link href="/" className="text-sm text-gray-500 underline hover:text-gray-800">
-          ← Shop
-        </Link>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Campaigns</h1>
+        <p className="mt-1.5 max-w-2xl text-sm text-ink-soft">
+          Every number here is either a real deterministic computation (segments, policy decisions) or an
+          explicitly simulated one (redemption, revenue) — see docs/046-campaigns.md. Run{" "}
+          <code className="rounded bg-black/[0.04] px-1.5 py-0.5 font-mono text-[13px] text-ink">
+            python campaigns/run.py
+          </code>{" "}
+          to generate history and campaigns.
+        </p>
       </header>
 
-      {error && <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div className="rounded-lg border border-danger/25 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>
+      )}
 
       {loading ? (
-        <p className="text-sm text-gray-400">Loading…</p>
+        <div className="flex flex-col gap-8">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonBlock key={i} className="h-24" />
+            ))}
+          </div>
+          <SkeletonBlock className="h-48" />
+        </div>
       ) : segments.length === 0 ? (
-        <p className="text-sm text-gray-400">
-          No synthetic history yet. Run <code className="rounded bg-gray-100 px-1">python campaigns/run.py</code>{" "}
-          from the repo root, then reload this page.
-        </p>
+        <Card className="flex flex-col items-center gap-2 px-6 py-14 text-center">
+          <Megaphone size={22} className="text-ink-faint" />
+          <p className="text-sm font-medium text-ink">No campaign history yet</p>
+          <p className="max-w-sm text-sm text-ink-soft">
+            Run{" "}
+            <code className="rounded bg-black/[0.04] px-1.5 py-0.5 font-mono text-[13px] text-ink">
+              python campaigns/run.py
+            </code>{" "}
+            from the repo root to generate synthetic history, then reload this page.
+          </p>
+        </Card>
       ) : (
         <>
-          <section>
-            <h2 className="mb-2 text-sm font-semibold text-gray-700">Segments (deterministic, no LLM)</h2>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
+          <section className="flex flex-col gap-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+              Segments — deterministic, no LLM
+            </h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {segments.map((s) => (
-                <div key={s.name} className="rounded-md border border-gray-200 p-2 text-xs">
-                  <div className="font-medium">{s.name}</div>
-                  <div className="text-gray-500">{s.size} member(s)</div>
-                  <div className="mt-1 text-gray-400">{s.description}</div>
-                </div>
+                <MetricCard key={s.name} label={s.name.replace(/_/g, " ")} value={String(s.size)} meta={s.description} />
               ))}
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-2 text-sm font-semibold text-gray-700">Campaign runs</h2>
-            <div className="overflow-x-auto rounded-md border border-gray-200">
-              <table className="w-full min-w-[900px] border-collapse text-sm">
-                <thead className="bg-gray-50 text-left text-gray-500">
+          <section className="flex flex-col gap-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Campaign runs</h2>
+            <TableWrap>
+              <Table className="min-w-[900px]">
+                <THead>
                   <tr>
-                    <th className="p-2">Segment</th>
-                    <th className="p-2">Status</th>
-                    <th className="p-2">Discount</th>
-                    <th className="p-2">Sent</th>
-                    <th className="p-2">Blocked</th>
-                    <th className="p-2">Control</th>
-                    <th className="p-2">Redemptions</th>
-                    <th className="p-2">Incremental revenue</th>
-                    <th className="p-2">Net margin impact</th>
+                    <Th>Segment</Th>
+                    <Th>Status</Th>
+                    <Th align="right">Discount</Th>
+                    <Th align="right">Sent</Th>
+                    <Th align="right">Blocked</Th>
+                    <Th align="right">Control</Th>
+                    <Th align="right">Redemptions</Th>
+                    <Th align="right">Incremental revenue</Th>
+                    <Th align="right">Net margin impact</Th>
                   </tr>
-                </thead>
+                </THead>
                 <tbody>
                   {campaigns.map((c) => (
-                    <tr
-                      key={c.campaign_id}
-                      onClick={() => openCampaign(c.campaign_id)}
-                      className="cursor-pointer border-t border-gray-100 hover:bg-gray-50"
-                    >
-                      <td className="p-2 font-medium">{c.segment_name}</td>
-                      <td className="p-2">{c.status}</td>
+                    <Tr key={c.campaign_id} onClick={() => openCampaign(c.campaign_id)}>
+                      <Td className="font-medium">{c.segment_name.replace(/_/g, " ")}</Td>
+                      <Td>
+                        <StatusBadge status={c.status} />
+                      </Td>
                       {c.status === "completed" && c.measurement && c.proposal ? (
                         <>
-                          <td className="p-2">{(c.proposal.discount_pct * 100).toFixed(0)}%</td>
-                          <td className="p-2">{c.measurement.offers_sent}</td>
-                          <td className="p-2">{c.measurement.offers_blocked}</td>
-                          <td className="p-2">{c.measurement.control_size}</td>
-                          <td className="p-2">{c.measurement.redemptions}</td>
-                          <td className="p-2">{paise(c.measurement.incremental_revenue_paise)}</td>
-                          <td className="p-2">
+                          <Td align="right" numeric>
+                            {(c.proposal.discount_pct * 100).toFixed(0)}%
+                          </Td>
+                          <Td align="right" numeric>
+                            {c.measurement.offers_sent}
+                          </Td>
+                          <Td align="right" numeric>
+                            {c.measurement.offers_blocked}
+                          </Td>
+                          <Td align="right" numeric>
+                            {c.measurement.control_size}
+                          </Td>
+                          <Td align="right" numeric>
+                            {c.measurement.redemptions}
+                          </Td>
+                          <Td align="right" numeric>
+                            {paise(c.measurement.incremental_revenue_paise)}
+                          </Td>
+                          <Td align="right" numeric>
                             <MarginImpact paise={c.measurement.net_margin_impact_paise} />
-                          </td>
+                          </Td>
                         </>
                       ) : (
-                        <td className="p-2 text-gray-400" colSpan={6}>
-                          refused before any customer was targeted — segment too small
-                        </td>
+                        <Td className="text-ink-faint" colSpan={7}>
+                          Refused before any customer was targeted — segment too small
+                        </Td>
                       )}
-                    </tr>
+                    </Tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+              </Table>
+            </TableWrap>
           </section>
 
-          {detailLoading && <p className="text-sm text-gray-400">Loading campaign…</p>}
+          {detailLoading && <SkeletonBlock className="h-40" />}
 
           {selected && (
-            <section className="flex flex-col gap-3 rounded-md border border-gray-200 p-4">
+            <Card className="flex flex-col gap-4 p-5">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">{selected.segment_name}</h2>
+                <h2 className="text-base font-semibold tracking-tight text-ink">
+                  {selected.segment_name.replace(/_/g, " ")}
+                </h2>
                 <a
                   href={`/audit?session=${selected.campaign_id}`}
-                  className="text-xs text-gray-400 underline hover:text-gray-700"
+                  className="text-xs font-medium text-accent hover:text-accent-hover"
                 >
                   Full audit trail →
                 </a>
               </div>
 
               {selected.proposal && (
-                <div className="rounded-md bg-gray-50 p-3 text-sm">
-                  <p>
-                    <strong>{(selected.proposal.discount_pct * 100).toFixed(0)}% off</strong>{" "}
-                    {selected.proposal.skus.length > 0 ? selected.proposal.skus.join(", ") : "personalized per customer (see table below)"}
+                <div className="rounded-lg bg-black/[0.02] p-4 text-sm">
+                  <p className="text-ink">
+                    <span className="font-mono font-semibold tabular-nums">
+                      {(selected.proposal.discount_pct * 100).toFixed(0)}%
+                    </span>{" "}
+                    off{" "}
+                    {selected.proposal.skus.length > 0
+                      ? selected.proposal.skus.join(", ")
+                      : "personalized per customer (see table below)"}
                   </p>
-                  <p className="mt-1 text-gray-700">&ldquo;{selected.proposal.message}&rdquo;</p>
-                  <p className="mt-1 text-xs text-gray-400">{selected.proposal.rationale}</p>
+                  <p className="mt-1.5 text-ink-soft">&ldquo;{selected.proposal.message}&rdquo;</p>
+                  <p className="mt-1.5 text-xs text-ink-faint">{selected.proposal.rationale}</p>
                 </div>
               )}
 
               {selected.segment_name === "browse_abandonment" && selected.measurement && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <div className="rounded-lg border border-warning/25 bg-warning-soft p-4 text-xs text-warning">
                   <p className="font-medium">
                     Conversion rate for this segment:{" "}
-                    {selected.measurement.offers_sent > 0
-                      ? `${((selected.measurement.redemptions / selected.measurement.offers_sent) * 100).toFixed(1)}%`
-                      : "n/a (no offers sent)"}
+                    <span className="font-mono tabular-nums">
+                      {selected.measurement.offers_sent > 0
+                        ? `${((selected.measurement.redemptions / selected.measurement.offers_sent) * 100).toFixed(1)}%`
+                        : "n/a (no offers sent)"}
+                    </span>
                   </p>
-                  <p className="mt-1">
+                  <p className="mt-1.5 leading-relaxed">
                     Reported separately on purpose: repeated views without a purchase has at least two plausible
                     causes — the price is above what this customer will pay, or the description doesn&rsquo;t answer a
                     question they have. View counts alone can&rsquo;t tell which. A low conversion rate here is
@@ -187,75 +219,97 @@ function CampaignsPageInner() {
               )}
 
               {selected.measurement && (
-                <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-                  <span>Treatment revenue: <strong>{paise(selected.measurement.treatment_revenue_paise)}</strong></span>
-                  <span>Control revenue: <strong>{paise(selected.measurement.control_revenue_paise)}</strong></span>
-                  <span>Control conv. rate: <strong>{(selected.measurement.control_conversion_rate * 100).toFixed(1)}%</strong></span>
-                  <span>Discount cost: <strong>{paise(selected.measurement.discount_cost_paise)}</strong></span>
-                  <span>Expected baseline revenue: <strong>{paise(selected.measurement.expected_baseline_revenue_paise)}</strong></span>
-                  <span>Incremental revenue: <strong>{paise(selected.measurement.incremental_revenue_paise)}</strong></span>
-                  <span>Treatment COGS: <strong>{paise(selected.measurement.treatment_cogs_paise)}</strong></span>
-                  <span>
-                    Net margin impact: <MarginImpact paise={selected.measurement.net_margin_impact_paise} />
-                  </span>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+                  {[
+                    ["Treatment revenue", paise(selected.measurement.treatment_revenue_paise)],
+                    ["Control revenue", paise(selected.measurement.control_revenue_paise)],
+                    ["Control conv. rate", `${(selected.measurement.control_conversion_rate * 100).toFixed(1)}%`],
+                    ["Discount cost", paise(selected.measurement.discount_cost_paise)],
+                    ["Expected baseline revenue", paise(selected.measurement.expected_baseline_revenue_paise)],
+                    ["Incremental revenue", paise(selected.measurement.incremental_revenue_paise)],
+                    ["Treatment COGS", paise(selected.measurement.treatment_cogs_paise)],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex flex-col gap-0.5">
+                      <span className="text-xs text-ink-faint">{label}</span>
+                      <span className="font-mono tabular-nums text-ink">{value}</span>
+                    </div>
+                  ))}
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs text-ink-faint">Net margin impact</span>
+                    <MarginImpact paise={selected.measurement.net_margin_impact_paise} />
+                  </div>
                 </div>
               )}
 
-              <div className="overflow-x-auto rounded-md border border-gray-200">
-                <table className="w-full min-w-[700px] border-collapse text-xs">
-                  <thead className="bg-gray-50 text-left text-gray-500">
+              <TableWrap>
+                <Table className="min-w-[700px] text-xs">
+                  <THead>
                     <tr>
-                      <th className="p-1.5">Customer</th>
-                      <th className="p-1.5">Group</th>
-                      <th className="p-1.5">SKU</th>
-                      <th className="p-1.5">Decision</th>
-                      <th className="p-1.5">Rule</th>
-                      <th className="p-1.5">Redeemed</th>
-                      <th className="p-1.5">Revenue</th>
-                      <th className="p-1.5">Reason</th>
+                      <Th>Customer</Th>
+                      <Th>Group</Th>
+                      <Th>SKU</Th>
+                      <Th>Decision</Th>
+                      <Th>Rule</Th>
+                      <Th align="right">Redeemed</Th>
+                      <Th align="right">Revenue</Th>
+                      <Th>Reason</Th>
                     </tr>
-                  </thead>
+                  </THead>
                   <tbody>
                     {selected.offers.map((o, i) => (
-                      <tr key={i} className="border-t border-gray-100 align-top">
-                        <td className="p-1.5 whitespace-nowrap">{o.customer_key}</td>
-                        <td className="p-1.5 whitespace-nowrap">{o.group}</td>
-                        <td className="p-1.5 whitespace-nowrap">{o.sku ?? "—"}</td>
-                        <td className="p-1.5"><DecisionBadge decision={o.decision} /></td>
-                        <td className="p-1.5 whitespace-nowrap">{o.rule_name ?? "—"}</td>
-                        <td className="p-1.5">{o.redeemed ? "yes" : "no"}</td>
-                        <td className="p-1.5 whitespace-nowrap">{paise(o.revenue_paise)}</td>
-                        <td className="p-1.5">{o.reason ?? "—"}</td>
-                      </tr>
+                      <Tr key={i}>
+                        <Td className="whitespace-nowrap">{o.customer_key}</Td>
+                        <Td className="whitespace-nowrap capitalize">{o.group}</Td>
+                        <Td className="whitespace-nowrap font-mono">{o.sku ?? "—"}</Td>
+                        <Td>
+                          <StatusBadge status={o.decision} />
+                        </Td>
+                        <Td className="whitespace-nowrap text-ink-soft">{o.rule_name ?? "—"}</Td>
+                        <Td align="right">{o.redeemed ? "Yes" : "No"}</Td>
+                        <Td align="right" numeric className="whitespace-nowrap">
+                          {paise(o.revenue_paise)}
+                        </Td>
+                        <Td className="text-ink-soft">{o.reason ?? "—"}</Td>
+                      </Tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
-            </section>
+                </Table>
+              </TableWrap>
+            </Card>
           )}
 
-          <section>
-            <h2 className="mb-2 text-sm font-semibold text-gray-700">Content gaps</h2>
-            <p className="mb-2 text-xs text-gray-500">
-              Questions the shopping assistant couldn&rsquo;t answer from a product&rsquo;s description. Not filled
-              in automatically — see docs/046b-browse-abandonment.md for why.
-            </p>
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Content gaps</h2>
+              <p className="mt-1 text-sm text-ink-soft">
+                Questions the shopping assistant couldn&rsquo;t answer from a product&rsquo;s description. Not
+                filled in automatically — see docs/046b-browse-abandonment.md for why.
+              </p>
+            </div>
             {contentGaps.length === 0 ? (
-              <p className="text-sm text-gray-400">No content gaps reported yet.</p>
+              <Card className="flex flex-col items-center gap-1.5 px-6 py-10 text-center">
+                <p className="text-sm font-medium text-ink">Nothing to review yet</p>
+                <p className="max-w-sm text-sm text-ink-soft">
+                  Content gaps show up here once a buyer asks the assistant something a product&rsquo;s description
+                  doesn&rsquo;t answer.
+                </p>
+              </Card>
             ) : (
-              <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {contentGaps.map((g) => (
-                  <div key={g.sku} className="rounded-md border border-gray-200 p-2 text-sm">
-                    <p>
-                      <strong>{g.count}</strong> user(s) asked about <strong>{g.sku}</strong> — your description
-                      doesn&rsquo;t cover this.
+                  <Card key={g.sku} className="p-4">
+                    <p className="text-sm text-ink">
+                      <span className="font-mono font-semibold tabular-nums">{g.count}</span> user(s) asked about{" "}
+                      <span className="font-mono">{g.sku}</span> — your description doesn&rsquo;t cover this.
                     </p>
-                    <ul className="mt-1 list-disc pl-5 text-xs text-gray-500">
+                    <ul className="mt-2 flex flex-col gap-1 text-xs text-ink-soft">
                       {g.sample_questions.map((q, i) => (
-                        <li key={i}>{q}</li>
+                        <li key={i} className="border-l-2 border-line pl-2">
+                          {q}
+                        </li>
                       ))}
                     </ul>
-                  </div>
+                  </Card>
                 ))}
               </div>
             )}

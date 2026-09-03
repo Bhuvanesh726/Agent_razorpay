@@ -41,7 +41,15 @@ export default function RequireAuth({ allow, children }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, user]);
 
-  if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>;
+  if (loading) {
+    return (
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-6 py-8">
+        <div className="h-7 w-40 animate-pulse rounded-md bg-black/[0.05]" />
+        <div className="h-4 w-72 animate-pulse rounded-md bg-black/[0.05]" />
+        <div className="mt-4 h-40 w-full animate-pulse rounded-lg bg-black/[0.05]" />
+      </div>
+    );
+  }
   if (!user || user.type === "pending") return null;
   if (allow && !allow.includes(user.type as "buyer" | "merchant")) return null;
   return <>{children}</>;

@@ -2,150 +2,188 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Bot, Package, ReceiptText } from "lucide-react";
 import { fetchDashboardSummary } from "@/lib/api";
 import type { DashboardSummary } from "@/lib/types";
 import RequireAuth from "@/components/RequireAuth";
 import FloatingChatLauncher from "@/components/FloatingChatLauncher";
+import OrderDetailModal from "@/components/OrderDetailModal";
 import DevRoleSwitch from "@/components/DevRoleSwitch";
 import { useAuth } from "@/lib/auth";
+import Button from "@/components/ui/Button";
+import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
+import { StatusBadge } from "@/components/ui/Badge";
+import EmptyState from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Table, TableWrap, THead, Th, Tr, Td } from "@/components/ui/Table";
 
 function paise(p: number): string {
   return `₹${(p / 100).toFixed(2)}`;
 }
 
-const ORDER_STATUS_STYLES: Record<string, string> = {
-  PAID: "bg-green-100 text-green-800",
-  FAILED: "bg-red-100 text-red-800",
-};
-
 function DashboardInner() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openOrderId, setOpenOrderId] = useState<number | null>(null);
 
-  useEffect(() => {
+  function refresh() {
     fetchDashboardSummary()
       .then(setSummary)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }
+
+  useEffect(refresh, []);
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-8">
       <header className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Your dashboard</h1>
-          <p className="text-sm text-gray-500">{user?.email}</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Your dashboard</h1>
+          <p className="mt-1 text-sm text-ink-soft">{user?.email}</p>
         </div>
-        <div className="flex items-center gap-4">
-          <Link href="/" className="text-sm text-gray-500 underline hover:text-gray-800">
-            Go to shop →
-          </Link>
-          <DevRoleSwitch />
-          <button onClick={logout} className="text-sm text-gray-500 underline hover:text-gray-800">
-            Sign out
-          </button>
-        </div>
+        <DevRoleSwitch />
       </header>
 
-      {error && <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {error && <div className="rounded-lg border border-danger/25 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>}
 
       {loading ? (
-        <p className="text-sm text-gray-500">Loading…</p>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <Skeleton className="h-36" />
+          <Skeleton className="h-36" />
+          <Skeleton className="h-48 md:col-span-2" />
+        </div>
       ) : summary ? (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <section className="rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold">Your agent</h2>
-              <Link href="/agents" className="text-xs text-gray-400 underline hover:text-gray-700">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Your agent</CardTitle>
+              <Link href="/agents" className="text-xs font-medium text-accent hover:text-accent-hover">
                 Manage agents →
               </Link>
-            </div>
-            {summary.agent ? (
-              <div className="mt-2 text-sm">
-                <p className="font-medium">{summary.agent.name}</p>
-                <p className="text-gray-500">
-                  {summary.agent.delivery_mode} · {summary.agent.status}
-                  {summary.agent_count > 1 && ` · ${summary.agent_count} total`}
-                </p>
-              </div>
-            ) : (
-              <div className="mt-3 flex flex-col items-start gap-2">
-                <p className="text-sm text-gray-500">You haven&rsquo;t created an agent yet.</p>
-                <Link
-                  href="/agents"
-                  className="rounded-md bg-black px-3 py-1.5 text-xs text-white hover:bg-gray-800"
-                >
-                  Create an agent
-                </Link>
-              </div>
-            )}
-          </section>
+            </CardHeader>
+            <CardBody>
+              {summary.agent ? (
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+                    <Bot size={17} />
+                  </div>
+                  <div className="text-sm">
+                    <p className="font-medium text-ink">{summary.agent.name}</p>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-ink-soft">
+                      {summary.agent.delivery_mode}
+                      <StatusBadge status={summary.agent.status} />
+                      {summary.agent_count > 1 && <span>· {summary.agent_count} total</span>}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  icon={Bot}
+                  title="No agent yet"
+                  description="Create a bounded agent to shop on your behalf, with its own spend limit and scopes."
+                  action={
+                    <Link href="/agents">
+                      <Button variant="primary" size="sm">
+                        Create an agent
+                      </Button>
+                    </Link>
+                  }
+                  className="border-0 p-0 py-4"
+                />
+              )}
+            </CardBody>
+          </Card>
 
-          <section className="rounded-lg border border-gray-200 p-4">
-            <h2 className="font-semibold">Current cart</h2>
-            {summary.cart.items.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-400">Empty — nothing added yet.</p>
-            ) : (
-              <>
-                <ul className="mt-2 flex flex-col gap-1 text-sm">
-                  {summary.cart.items.map((item) => (
-                    <li key={item.id} className="flex justify-between">
-                      <span>
-                        {item.quantity} × {item.name}
-                      </span>
-                      <span>{item.line_total_display}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 border-t border-gray-100 pt-2 text-sm font-medium">
-                  Total: {summary.cart.total_display}
-                </p>
-              </>
-            )}
-            <Link href="/" className="mt-3 inline-block text-xs text-gray-400 underline hover:text-gray-700">
-              Go to shop →
-            </Link>
-          </section>
-
-          <section className="rounded-lg border border-gray-200 p-4 md:col-span-2">
-            <h2 className="font-semibold">Recent orders</h2>
-            {summary.recent_orders.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-400">No orders yet.</p>
-            ) : (
-              <table className="mt-2 w-full border-collapse text-sm">
-                <thead className="text-left text-gray-500">
-                  <tr>
-                    <th className="p-1.5">Order</th>
-                    <th className="p-1.5">Amount</th>
-                    <th className="p-1.5">Status</th>
-                    <th className="p-1.5">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.recent_orders.map((o) => (
-                    <tr key={o.id} className="border-t border-gray-100">
-                      <td className="p-1.5">#{o.id}</td>
-                      <td className="p-1.5">{paise(o.amount_paise)}</td>
-                      <td className="p-1.5">
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-xs font-medium ${
-                            ORDER_STATUS_STYLES[o.status] ?? "bg-gray-100 text-gray-700"
-                          }`}
-                        >
-                          {o.status}
+          <Card>
+            <CardHeader>
+              <CardTitle>Current cart</CardTitle>
+              <Link href="/" className="text-xs font-medium text-accent hover:text-accent-hover">
+                Go to shop →
+              </Link>
+            </CardHeader>
+            <CardBody>
+              {summary.cart.items.length === 0 ? (
+                <EmptyState
+                  icon={Package}
+                  title="Cart is empty"
+                  description="Nothing added yet — browse the shop or ask the assistant."
+                  className="border-0 p-0 py-4"
+                />
+              ) : (
+                <>
+                  <ul className="flex flex-col gap-1.5 text-sm">
+                    {summary.cart.items.map((item) => (
+                      <li key={item.id} className="flex justify-between text-ink">
+                        <span>
+                          {item.quantity} × {item.name}
                         </span>
-                      </td>
-                      <td className="p-1.5 text-gray-400">{new Date(o.created_at + "Z").toLocaleDateString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </section>
+                        <span className="font-mono tabular-nums">{item.line_total_display}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 flex justify-between border-t border-line pt-2 text-sm font-semibold text-ink">
+                    <span>Total</span>
+                    <span className="font-mono tabular-nums">{summary.cart.total_display}</span>
+                  </p>
+                </>
+              )}
+            </CardBody>
+          </Card>
+
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>Recent orders</CardTitle>
+              <Link href="/orders" className="text-xs font-medium text-accent hover:text-accent-hover">
+                View all →
+              </Link>
+            </CardHeader>
+            <CardBody className={summary.recent_orders.length === 0 ? "" : "p-0"}>
+              {summary.recent_orders.length === 0 ? (
+                <EmptyState
+                  icon={ReceiptText}
+                  title="No orders yet"
+                  description="Completed orders will show up here."
+                  className="border-0 p-0 py-4"
+                />
+              ) : (
+                <TableWrap className="rounded-none border-0">
+                  <Table>
+                    <THead>
+                      <tr>
+                        <Th>Order</Th>
+                        <Th align="right">Amount</Th>
+                        <Th>Status</Th>
+                        <Th align="right">Date</Th>
+                      </tr>
+                    </THead>
+                    <tbody>
+                      {summary.recent_orders.map((o) => (
+                        <Tr key={o.id} onClick={() => setOpenOrderId(o.id)}>
+                          <Td className="font-mono">#{o.id}</Td>
+                          <Td align="right" numeric>
+                            {paise(o.amount_paise)}
+                          </Td>
+                          <Td>
+                            <StatusBadge status={o.status} />
+                          </Td>
+                          <Td align="right" className="text-ink-faint">
+                            {new Date(o.created_at + "Z").toLocaleDateString()}
+                          </Td>
+                        </Tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </TableWrap>
+              )}
+            </CardBody>
+          </Card>
         </div>
       ) : null}
+
+      {openOrderId != null && <OrderDetailModal orderId={openOrderId} onClose={() => setOpenOrderId(null)} />}
 
       <FloatingChatLauncher onCartChanged={() => fetchDashboardSummary().then(setSummary).catch(() => undefined)} />
     </div>

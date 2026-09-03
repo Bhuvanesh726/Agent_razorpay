@@ -1,16 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { addCartItem, fetchCart, fetchCategories, fetchProducts, removeCartItem } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { addCartItem, fetchCart, fetchCategories, fetchProducts, initiateCheckout, removeCartItem } from "@/lib/api";
+import { getOrCreateSessionId, openRazorpayCheckout } from "@/lib/checkout";
 import type { Cart, Category, Product } from "@/lib/types";
 import CategoryTabs from "@/components/CategoryTabs";
 import SearchBox from "@/components/SearchBox";
 import ProductGrid from "@/components/ProductGrid";
 import ProductDetailModal from "@/components/ProductDetailModal";
 import CartSidebar from "@/components/CartSidebar";
-import ChatPanel from "@/components/ChatPanel";
+import FloatingChatLauncher from "@/components/FloatingChatLauncher";
 import RequireAuth from "@/components/RequireAuth";
-import { useAuth } from "@/lib/auth";
 
 const CHAT_SESSION_STORAGE_KEY = "razorpay-agent-session-id";
 
@@ -23,7 +24,7 @@ export default function Home() {
 }
 
 function Shop() {
-  const { user, logout } = useAuth();
+  const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -34,6 +35,7 @@ function Shop() {
   const [addingSku, setAddingSku] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
+  const [buyingNow, setBuyingNow] = useState(false);
 
   function refreshCart() {
     fetchCart().then(setCart).catch((e) => setError(e.message));
@@ -93,56 +95,56 @@ function Shop() {
     }
   }
 
+  async function handleBuyNow() {
+    setBuyingNow(true);
+    setError(null);
+    try {
+      const payment = await initiateCheckout(getOrCreateSessionId());
+      openRazorpayCheckout(payment, `Order #${payment.order_id}`, {
+        onSuccess: () => {
+          refreshCart();
+          setBuyingNow(false);
+          router.push("/orders");
+        },
+        onFailure: (result) => {
+          setError(result.message);
+          setBuyingNow(false);
+        },
+        onDismiss: () => setBuyingNow(false),
+        onUnavailable: () => {
+          setError("Razorpay Checkout hasn't loaded yet — please try again in a moment.");
+          setBuyingNow(false);
+        },
+        onError: (message) => {
+          setError(message);
+          setBuyingNow(false);
+        },
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBuyingNow(false);
+    }
+  }
+
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
-      <header className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Razorpay Shop</h1>
-          <p className="text-sm text-gray-500">
-            Browse and add manually, or ask the assistant. Every money action it takes is policy-gated and logged.
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm text-gray-500 underline hover:text-gray-800">
-            Dashboard →
-          </a>
-          <a href="/agents" className="text-sm text-gray-500 underline hover:text-gray-800">
-            My agents →
-          </a>
-          <a href="/audit" className="text-sm text-gray-500 underline hover:text-gray-800">
-            Audit trail viewer →
-          </a>
-          {user && (
-            <div className="flex items-center gap-2 border-l border-gray-200 pl-4">
-              <span className="text-sm text-gray-500">{user.email}</span>
-              <button onClick={logout} className="text-sm text-gray-500 underline hover:text-gray-800">
-                Sign out
-              </button>
-            </div>
-          )}
-        </div>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Shop</h1>
+        <p className="mt-1 text-sm text-ink-soft">
+          Browse and add manually, or ask the assistant. Every money action it takes is policy-gated and logged.
+        </p>
       </header>
 
-      {error && (
-        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="rounded-lg border border-danger/25 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px_300px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
         <main className="flex flex-col gap-4">
           <SearchBox value={search} onChange={setSearch} />
           <CategoryTabs categories={categories} selected={selectedCategory} onSelect={setSelectedCategory} />
-          {loading ? (
-            <p className="text-sm text-gray-500">Loading products...</p>
-          ) : (
-            <ProductGrid products={products} onAdd={handleAdd} onView={setViewingProduct} addingSku={addingSku} />
-          )}
+          <ProductGrid products={products} onAdd={handleAdd} onView={setViewingProduct} addingSku={addingSku} loading={loading} />
         </main>
 
-        <ChatPanel onCartChanged={refreshCart} />
-
-        <CartSidebar cart={cart} onRemove={handleRemove} removingId={removingId} />
+        <CartSidebar cart={cart} onRemove={handleRemove} removingId={removingId} onBuyNow={handleBuyNow} buyingNow={buyingNow} />
       </div>
 
       {viewingProduct && (
@@ -154,6 +156,8 @@ function Shop() {
           adding={addingSku === viewingProduct.sku}
         />
       )}
+
+      <FloatingChatLauncher onCartChanged={refreshCart} />
     </div>
   );
 }

@@ -1,43 +1,63 @@
+import { PackageSearch } from "lucide-react";
 import type { Product } from "@/lib/types";
+import Button from "@/components/ui/Button";
+import EmptyState from "@/components/ui/EmptyState";
+import { SkeletonCards } from "@/components/ui/Skeleton";
 
 interface Props {
   products: Product[];
   onAdd: (sku: string) => void;
   onView: (product: Product) => void;
   addingSku: string | null;
+  loading?: boolean;
 }
 
-export default function ProductGrid({ products, onAdd, onView, addingSku }: Props) {
+export default function ProductGrid({ products, onAdd, onView, addingSku, loading = false }: Props) {
+  if (loading) return <SkeletonCards count={8} className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" />;
+
   if (products.length === 0) {
-    return <p className="text-sm text-gray-500">No products match your filters.</p>;
+    return (
+      <EmptyState
+        icon={PackageSearch}
+        title="No products match your filters"
+        description="Try a different search term, or clear the category filter."
+      />
+    );
   }
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {products.map((p) => (
-        <div key={p.sku} className="flex flex-col justify-between rounded-lg border border-gray-200 p-4">
+        <div
+          key={p.sku}
+          className="flex flex-col justify-between rounded-lg border border-line bg-surface p-4 transition-colors duration-150 hover:border-line-strong"
+        >
           <button onClick={() => onView(p)} className="text-left">
-            <p className="text-xs uppercase text-gray-400">{p.brand}</p>
-            <h3 className="font-medium leading-snug hover:underline">{p.name}</h3>
-            <p className="mt-1 text-xs text-gray-500">{p.unit}</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{p.brand}</p>
+            <h3 className="mt-0.5 font-medium leading-snug text-ink hover:text-accent">{p.name}</h3>
+            <p className="mt-1 text-xs text-ink-soft">{p.unit}</p>
             {p.discount_pct ? (
               <p className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-xs text-gray-400 line-through">{p.price_display}</span>
-                <span className="text-lg font-semibold text-green-700">{p.effective_price_display}</span>
-                <span className="text-xs font-medium text-green-700">-{p.discount_pct}%</span>
+                <span className="font-mono text-xs tabular-nums text-ink-faint line-through">{p.price_display}</span>
+                <span className="font-mono text-lg font-semibold tabular-nums text-success">
+                  {p.effective_price_display}
+                </span>
+                <span className="text-xs font-medium text-success">-{p.discount_pct}%</span>
               </p>
             ) : (
-              <p className="mt-2 text-lg font-semibold">{p.price_display}</p>
+              <p className="mt-2 font-mono text-lg font-semibold tabular-nums text-ink">{p.price_display}</p>
             )}
-            <p className="text-xs text-gray-400">{p.stock > 0 ? `${p.stock} in stock` : "Out of stock"}</p>
+            <p className="mt-0.5 text-xs text-ink-faint">{p.stock > 0 ? `${p.stock} in stock` : "Out of stock"}</p>
           </button>
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => onAdd(p.sku)}
             disabled={p.stock === 0 || addingSku === p.sku}
-            className="mt-3 rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-40"
+            className="mt-3 w-full"
           >
-            {addingSku === p.sku ? "Adding..." : "Add to cart"}
-          </button>
+            {addingSku === p.sku ? "Adding…" : "Add to cart"}
+          </Button>
         </div>
       ))}
     </div>

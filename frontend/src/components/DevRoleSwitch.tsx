@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { devSwitchRole } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -30,16 +31,20 @@ export default function DevRoleSwitch() {
   }
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
+      <span className="rounded bg-black/[0.05] px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
+        Dev
+      </span>
       <button
         onClick={switchRole}
         disabled={busy}
         title="Dev-only: demo both sides without two Google accounts"
-        className="rounded-md border border-dashed border-amber-400 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-40"
+        className="inline-flex items-center gap-1.5 rounded-full bg-warning-soft px-3 py-1.5 text-xs font-medium text-warning transition-colors duration-150 hover:bg-warning/15 disabled:opacity-40"
       >
-        {busy ? "Switching…" : `Dev: switch to ${target === "BUYER" ? "buyer" : "merchant"}`}
+        <RefreshCw size={12} className={busy ? "animate-spin" : ""} />
+        {busy ? "Switching…" : `Switch to ${target === "BUYER" ? "buyer" : "merchant"} view`}
       </button>
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {error && <span className="text-xs text-danger">{error}</span>}
     </div>
   );
 }

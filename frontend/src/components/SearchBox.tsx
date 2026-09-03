@@ -1,3 +1,6 @@
+import { Search } from "lucide-react";
+import { Input } from "@/components/ui/Input";
+
 interface Props {
   value: string;
   onChange: (value: string) => void;
@@ -5,12 +8,15 @@ interface Props {
 
 export default function SearchBox({ value, onChange }: Props) {
   return (
-    <input
-      type="search"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder="Search products by name or tag..."
-      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
-    />
+    <div className="relative">
+      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+      <Input
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search products by name or tag..."
+        className="pl-9"
+      />
+    </div>
   );
 }

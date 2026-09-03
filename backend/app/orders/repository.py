@@ -24,6 +24,14 @@ def list_by_user(db: Session, user_id: str, *, limit: int = 10) -> list[Order]:
     return list(db.scalars(stmt))
 
 
+def list_all(db: Session, *, limit: int = 200) -> list[Order]:
+    """Every order, any buyer — backs the merchant-wide orders view
+    (app/routers/orders.py). Unscoped by design: a merchant reviewing
+    incoming orders is the one caller allowed to see across buyers."""
+    stmt = select(Order).order_by(Order.created_at.desc()).limit(limit)
+    return list(db.scalars(stmt))
+
+
 def find_by_razorpay_order_id(db: Session, razorpay_order_id: str) -> Order | None:
     return db.scalar(select(Order).where(Order.razorpay_order_id == razorpay_order_id))
 

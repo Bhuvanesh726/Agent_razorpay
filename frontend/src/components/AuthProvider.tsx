@@ -11,7 +11,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const token = getToken();
     if (!token) {
-      setLoading(false);
+      // Deferred to a microtask, same reasoning as app/audit/page.tsx's
+      // identical pattern: a setState call must not run synchronously
+      // inside the effect body itself.
+      Promise.resolve().then(() => setLoading(false));
       return;
     }
     fetchMe()

@@ -4,6 +4,7 @@ import type {
   AgentCreateResponse,
   AgentDetail,
   AgentSummary,
+  AuditSessionSummary,
   AuditTrail,
   CampaignDetail,
   CampaignSummary,
@@ -15,6 +16,9 @@ import type {
   MeResponse,
   MerchantNotification,
   MerchantProductRow,
+  OrderDetail,
+  OrderListItem,
+  PaymentInfo,
   PaymentResult,
   ProductListResponse,
   RoleChoiceResult,
@@ -127,6 +131,10 @@ export function fetchAuditTrail(sessionId: string): Promise<AuditTrail> {
   return request<AuditTrail>(`/api/audit/${sessionId}`);
 }
 
+export function fetchRecentAuditSessions(limit = 20): Promise<AuditSessionSummary[]> {
+  return request<AuditSessionSummary[]>(`/api/audit/sessions?limit=${limit}`);
+}
+
 export function fetchSessionReplay(sessionId: string): Promise<SessionReplay> {
   return request<SessionReplay>(`/api/audit/${sessionId}/replay`);
 }
@@ -190,6 +198,25 @@ export function reportPaymentFailed(
 
 export function fetchMe(): Promise<MeResponse> {
   return request<MeResponse>("/api/auth/me");
+}
+
+export function initiateCheckout(sessionId: string): Promise<PaymentInfo> {
+  return request<PaymentInfo>("/api/checkout/initiate", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+}
+
+export function fetchOrders(): Promise<OrderListItem[]> {
+  return request<OrderListItem[]>("/api/orders");
+}
+
+export function fetchOrderDetail(orderId: number): Promise<OrderDetail> {
+  return request<OrderDetail>(`/api/orders/${orderId}`);
+}
+
+export function fetchMerchantOrders(): Promise<OrderListItem[]> {
+  return request<OrderListItem[]>("/api/merchant/orders");
 }
 
 export function fetchAgents(): Promise<AgentSummary[]> {

@@ -48,6 +48,15 @@ class AuditTrailOut(BaseModel):
     totals: AuditTotalsOut
 
 
+class AuditSessionSummaryOut(BaseModel):
+    session_id: str
+    user_email: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    event_count: int
+
+
 class SessionReplayOut(BaseModel):
     session_id: str
     event_count: int

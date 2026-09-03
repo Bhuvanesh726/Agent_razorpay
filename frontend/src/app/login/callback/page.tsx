@@ -21,12 +21,12 @@ function LoginCallbackInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <div className="p-6 text-sm text-gray-400">Signing you in…</div>;
+  return <div className="mx-auto w-full max-w-sm px-6 py-8 text-sm text-ink-soft">Signing you in…</div>;
 }
 
 export default function LoginCallbackPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-400">Signing you in…</div>}>
+    <Suspense fallback={<div className="mx-auto w-full max-w-sm px-6 py-8 text-sm text-ink-soft">Signing you in…</div>}>
       <LoginCallbackInner />
     </Suspense>
   );

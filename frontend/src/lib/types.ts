@@ -96,6 +96,9 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
   text: string;
+  // Client-side only (Date.now() at push time) — purely for display, never
+  // sent to or received from the backend.
+  timestamp: number;
 }
 
 export interface AuditEvent {
@@ -139,6 +142,15 @@ export interface AuditTrail {
   session_id: string;
   events: AuditEvent[];
   totals: AuditTotals;
+}
+
+export interface AuditSessionSummary {
+  session_id: string;
+  user_email: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  event_count: number;
 }
 
 export interface SessionReplay {
@@ -289,6 +301,39 @@ export interface DashboardSummary {
   cart: Cart;
 }
 
+// --- Layer 5b: orders (buyer + merchant) ---
+
+export interface OrderListItem {
+  id: number;
+  status: string;
+  amount_paise: number;
+  created_at: string;
+  item_count: number;
+  buyer_email: string | null;
+}
+
+export interface OrderItem {
+  sku: string;
+  name: string;
+  quantity: number;
+  unit_price_paise: number;
+  line_total_paise: number;
+}
+
+export interface OrderDetail {
+  id: number;
+  status: string;
+  amount_paise: number;
+  currency: string;
+  created_at: string;
+  updated_at: string;
+  items: OrderItem[];
+  razorpay_payment_id: string | null;
+  failure_code: string | null;
+  failure_description: string | null;
+  buyer_email: string;
+}
+
 // --- Layer 4.8: merchant dashboard ---
 
 export interface MerchantNotification {
@@ -301,6 +346,8 @@ export interface MerchantNotification {
   acted_at: string | null;
   dismissed_at: string | null;
   conversions_since_acted: number;
+  purchases_since_acted: number;
+  revenue_since_acted_paise: number;
 }
 
 export interface MerchantProductRow {
