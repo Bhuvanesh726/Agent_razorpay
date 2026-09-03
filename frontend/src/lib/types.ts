@@ -205,3 +205,53 @@ export interface ContentGap {
   count: number;
   sample_questions: string[];
 }
+
+export interface MeResponse {
+  type: "buyer" | "merchant" | "agent";
+  user_id: string;
+  email: string | null;
+  role: "BUYER" | "MERCHANT" | null;
+  credential_id: string | null;
+}
+
+export interface AgentCreateRequest {
+  name: string;
+  delivery_mode: "EMBEDDED" | "EXTERNAL";
+  scopes: string[];
+  spend_limit_paise: number;
+  standing_instruction?: string | null;
+}
+
+export interface AgentSummary {
+  id: string;
+  name: string;
+  delivery_mode: string;
+  scopes: string[];
+  spend_limit_paise: number;
+  spent_paise: number;
+  status: string;
+  standing_instruction: string | null;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface AgentCreateResponse extends AgentSummary {
+  // Populated exactly once, and only for delivery_mode "EXTERNAL" — see
+  // docs/047-principals.md. Never present for EMBEDDED.
+  key: string | null;
+}
+
+export interface AgentAction {
+  timestamp: string;
+  session_id: string;
+  event_type: string;
+  tool_name: string | null;
+  decision: "ALLOW" | "DENY" | "REQUIRE_CONFIRMATION" | null;
+  rule_name: string | null;
+  reason: string | null;
+}
+
+export interface AgentDetail extends AgentSummary {
+  recent_actions: AgentAction[];
+}

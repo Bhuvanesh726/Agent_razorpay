@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.config import settings  # noqa: E402
 from app.database import Base  # noqa: E402
 from app.models import (  # noqa: E402,F401
+    AgentCredential,
     AgentMessage,
     AgentSession,
     AuditEvent,
@@ -27,6 +28,7 @@ from app.models import (  # noqa: E402,F401
     Payment,
     Product,
     ProductView,
+    User,
 )
 
 # this is the Alembic Config object, which provides

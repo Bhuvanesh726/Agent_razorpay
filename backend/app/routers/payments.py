@@ -16,6 +16,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.audit.service import AuditService
+from app.auth.deps import get_principal
+from app.auth.principal import Principal
+from app.auth.routing import AuthRequirement, SecureAPIRoute, requires
 from app.core.config import settings
 from app.database import get_db
 from app.orders import repository as order_repo
@@ -24,17 +27,33 @@ from app.orders.state_machine import OrderStatus
 from app.payments.gateway import gateway
 from app.schemas.payments import PaymentFailedRequest, PaymentResultOut, TestCompletePaymentRequest, VerifyPaymentRequest
 
-router = APIRouter(tags=["payments"])
+router = APIRouter(tags=["payments"], route_class=SecureAPIRoute)
 _audit = AuditService()
 
 
-@router.post("/api/payments/verify", response_model=PaymentResultOut)
-def verify_payment(payload: VerifyPaymentRequest, request: Request, db: Session = Depends(get_db)) -> PaymentResultOut:
-    request_id = getattr(request.state, "request_id", None)
-
-    order = order_repo.find_by_razorpay_order_id(db, payload.razorpay_order_id)
+def _find_owned_order(db: Session, razorpay_order_id: str, principal: Principal):
+    order = order_repo.find_by_razorpay_order_id(db, razorpay_order_id)
     if order is None:
         raise HTTPException(status_code=404, detail="No order found for this razorpay_order_id.")
+    if order.user_id != principal.user_id:
+        # Identical 404 whether the order doesn't exist or isn't the
+        # caller's — a 403 here would confirm to a prober that the
+        # razorpay_order_id is real.
+        raise HTTPException(status_code=404, detail="No order found for this razorpay_order_id.")
+    return order
+
+
+@router.post("/api/payments/verify", response_model=PaymentResultOut)
+@requires(AuthRequirement.BUYER)
+def verify_payment(
+    payload: VerifyPaymentRequest,
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+) -> PaymentResultOut:
+    request_id = getattr(request.state, "request_id", None)
+
+    order = _find_owned_order(db, payload.razorpay_order_id, principal)
 
     # Idempotent: a duplicate verify call for an order that's already PAID
     # (rapid double-click, a retried request) is reported back as the same
@@ -135,8 +154,12 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request, db: Session 
 
 
 @router.post("/api/payments/test-complete", response_model=PaymentResultOut)
+@requires(AuthRequirement.BUYER, AuthRequirement.AGENT)
 def test_complete_payment(
-    payload: TestCompletePaymentRequest, request: Request, db: Session = Depends(get_db)
+    payload: TestCompletePaymentRequest,
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
 ) -> PaymentResultOut:
     """Stands in for a completed Razorpay Checkout round-trip in headless
     contexts — same dev-only gating as X-Chaos-Fault (app/testing/chaos.py),
@@ -147,13 +170,16 @@ def test_complete_payment(
     process — and then calls the exact same verify_payment() below with it,
     so the real signature-check code path still runs unmodified. Only the
     *signing* is a shortcut; the *verification* is not.
+
+    AGENT is allowed here (unlike /verify and /failed, which stay BUYER-only
+    for the real browser-driven Checkout callback) precisely because this
+    endpoint exists FOR buyer_agent/ — an external agent has no browser to
+    receive that callback in the first place.
     """
     if settings.app_env != "development":
         raise HTTPException(status_code=404, detail="Not found.")
 
-    order = order_repo.find_by_razorpay_order_id(db, payload.razorpay_order_id)
-    if order is None:
-        raise HTTPException(status_code=404, detail="No order found for this razorpay_order_id.")
+    order = _find_owned_order(db, payload.razorpay_order_id, principal)
 
     payment_id = f"pay_test_{uuid.uuid4().hex[:12]}"
     signature = hmac.new(
@@ -164,21 +190,23 @@ def test_complete_payment(
     verify_payload = VerifyPaymentRequest(
         razorpay_order_id=payload.razorpay_order_id, razorpay_payment_id=payment_id, razorpay_signature=signature
     )
-    return verify_payment(verify_payload, request, db)
+    return verify_payment(verify_payload, request, principal, db)
 
 
 @router.post("/api/payments/failed", response_model=PaymentResultOut)
+@requires(AuthRequirement.BUYER)
 def report_payment_failed(
-    payload: PaymentFailedRequest, request: Request, db: Session = Depends(get_db)
+    payload: PaymentFailedRequest,
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
 ) -> PaymentResultOut:
     """Razorpay's own Checkout reports a failure client-side (e.g. a
     declined test card) with no payment id and nothing to verify — there was
     no successful payment to forge a claim about. This just records it."""
     request_id = getattr(request.state, "request_id", None)
 
-    order = order_repo.find_by_razorpay_order_id(db, payload.razorpay_order_id)
-    if order is None:
-        raise HTTPException(status_code=404, detail="No order found for this razorpay_order_id.")
+    order = _find_owned_order(db, payload.razorpay_order_id, principal)
 
     order_service.mark_failed(db, order, error_code=payload.error_code, error_description=payload.error_description)
     _audit.log_event(

@@ -8,20 +8,29 @@ from email.utils import format_datetime
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
+from app.auth.routing import SecureAPIRoute, public
 from app.database import get_db
 from app.schemas.catalog import CatalogFeedOut
 from app.services import catalog_service
 
-router = APIRouter(tags=["catalog"])
+router = APIRouter(tags=["catalog"], route_class=SecureAPIRoute)
+
+# Deliberately PUBLIC, not just unauthenticated-by-omission: these are the
+# discovery/feed endpoints Layer 4.5's external-agent story depends on — a
+# consuming agent has no credential yet when it first looks here to find out
+# what's for sale. Explicit @public keeps that behavior under the new
+# default-deny mechanism instead of it silently starting to 403.
 
 
 @router.get("/.well-known/catalog.json")
+@public
 def discovery_doc(request: Request) -> dict:
     base_url = str(request.base_url).rstrip("/")
     return catalog_service.build_discovery_doc(base_url)
 
 
 @router.get("/api/catalog/feed", response_model=CatalogFeedOut)
+@public
 def catalog_feed(
     request: Request,
     response: Response,

@@ -39,8 +39,14 @@ def test_audit_repository_has_no_update_or_delete():
     assert not hasattr(repo, "update")
     assert not hasattr(repo, "delete")
     # create + reads only — list_by_event_type (Layer 4.6b, content-gap
-    # aggregation) is a cross-session read, same append-only discipline.
-    assert {name for name in dir(repo) if not name.startswith("_")} == {"create", "list_for_session", "list_by_event_type"}
+    # aggregation) and list_by_principal (Layer 4.7, an agent's recent
+    # actions) are both cross-session reads, same append-only discipline.
+    assert {name for name in dir(repo) if not name.startswith("_")} == {
+        "create",
+        "list_for_session",
+        "list_by_event_type",
+        "list_by_principal",
+    }
 
 
 def test_audit_service_has_no_update_or_delete():
@@ -52,6 +58,7 @@ def test_audit_service_has_no_update_or_delete():
         "get_trail",
         "compute_totals",
         "get_content_gaps",
+        "get_agent_actions",
     }
 
 

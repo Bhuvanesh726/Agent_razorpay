@@ -35,6 +35,12 @@ class JsonFormatter(logging.Formatter):
         for key, value in record.__dict__.items():
             if key not in _STANDARD_LOG_RECORD_ATTRS and key != "request_id":
                 payload[key] = value
+        # logging.Formatter normally appends this itself when exc_info is
+        # set — our override replaces that entirely, so a caller passing
+        # exc_info=True (e.g. app/auth/oauth_router.py's callback handler)
+        # would otherwise have the traceback silently dropped.
+        if record.exc_info:
+            payload["traceback"] = self.formatException(record.exc_info)
         return json.dumps(payload, default=str)
 
 

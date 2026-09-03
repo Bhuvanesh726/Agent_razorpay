@@ -7,6 +7,20 @@ isolated from the merchant it's buying from:
     HTTP surface, exactly like a real third-party integrator would see it.
   - No shared DB session, no direct SQL, no filesystem access into the
     merchant's project.
+  - No login, no browser, no consent screen — this is Layer 4.7's Mode B
+    (external) agent credential. It authenticates every call with
+    X-Agent-Key, a bounded, revocable secret bound to a specific buyer and
+    scoped to a specific set of tools, shown to a human exactly once at
+    creation (see docs/047-principals.md). Get one with:
+        python backend/scripts/create_agent_credential.py
+    then either export AGENT_API_KEY=<key> or pass --agent-key <key>.
+  - Every cart mutation goes through /api/agent/chat, never the raw
+    /api/cart REST endpoints — those are deliberately BUYER-only (see
+    backend/app/routers/cart.py) precisely so an agent can't bypass the
+    policy engine (RevokedCredentialRule, AgentScopeRule,
+    AgentSpendLimitRule) that only runs in front of the chat path. That
+    includes clearing out any leftover cart from a previous run, which used
+    to be a direct REST reset and is now its own chat turn.
   - No access to the merchant's Razorpay key_secret — real Checkout
     verification needs either a browser (which this headless script doesn't
     drive) or that secret, and a genuine external buyer has neither. This
@@ -25,12 +39,15 @@ Two scenarios, run by default:
      sized so any upsell offered would breach the spend cap — the offer
      must never appear, and the audit trail must show why.
 
+    python backend/scripts/create_agent_credential.py   # once, to get a key
+    export AGENT_API_KEY=agentkey_...
     python buyer_agent/buyer.py
-    python buyer_agent/buyer.py --base-url http://127.0.0.1:8842
+    python buyer_agent/buyer.py --base-url http://127.0.0.1:8842 --agent-key agentkey_...
 """
 
 import argparse
 import json
+import os
 import random
 import sys
 import uuid
@@ -50,7 +67,7 @@ def _step(text: str) -> None:
     print(f"\n--- {text} ---")
 
 
-def _call(base_url: str, method: str, path_or_url: str, body: dict | None = None) -> dict:
+def _call(base_url: str, method: str, path_or_url: str, body: dict | None = None, headers: dict | None = None) -> dict:
     """path_or_url may be a path ('/health') or a full URL — full URLs come
     straight from the discovery document rather than being reconstructed
     from a path, so there's exactly one place that ever assembles a URL
@@ -60,25 +77,14 @@ def _call(base_url: str, method: str, path_or_url: str, body: dict | None = None
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = request.Request(url, data=data, method=method)
     req.add_header("Content-Type", "application/json")
+    for key, value in (headers or {}).items():
+        req.add_header(key, value)
     try:
         with request.urlopen(req, timeout=120) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except error.HTTPError as e:
         detail = e.read().decode("utf-8")
         raise RuntimeError(f"{method} {url} -> HTTP {e.code}: {detail}") from e
-
-
-def _reset_cart(base_url: str) -> None:
-    """This store keeps one active cart per user, shared across every
-    session (a Layer 0 simplification — there's a single hardcoded demo
-    user, no auth yet) — so a leftover item from an unrelated earlier
-    session or test run would otherwise silently join this scenario's
-    basket. /api/cart is a public REST endpoint (same one the shop's own
-    frontend uses), not internal access — clearing it first is what
-    demo.py already has to do for the same reason."""
-    cart = _call(base_url, "GET", "/api/cart")
-    for item in cart["items"]:
-        _call(base_url, "DELETE", f"/api/cart/items/{item['id']}")
 
 
 def discover(base_url: str) -> dict:
@@ -174,7 +180,9 @@ def build_tightest_single_item_basket(feed_items: list[dict], budget_paise: int)
     return [max(in_stock, key=lambda i: i["price_paise"])]
 
 
-def _send(base_url: str, chat_url: str, confirm_url: str, session_id: str, message: str, budget_paise: int | None = None) -> dict:
+def _send(
+    base_url: str, chat_url: str, confirm_url: str, session_id: str, message: str, headers: dict, budget_paise: int | None = None
+) -> dict:
     """Send a chat message and, if it comes back needing confirmation for
     anything other than payment (e.g. ConfirmationThresholdRule on a
     pricier add — very possible once a real basket includes anything over
@@ -185,15 +193,14 @@ def _send(base_url: str, chat_url: str, confirm_url: str, session_id: str, messa
     body: dict = {"session_id": session_id, "message": message}
     if budget_paise is not None:
         body["budget_paise"] = budget_paise
-    res = _call(base_url, "POST", chat_url, body)
+    res = _call(base_url, "POST", chat_url, body, headers)
     if res["status"] == "awaiting_confirmation" and (res.get("pending") or {}).get("tool_name") != "initiate_payment":
-        res = _call(base_url, "POST", confirm_url, {"session_id": session_id, "approve": True})
+        res = _call(base_url, "POST", confirm_url, {"session_id": session_id, "approve": True}, headers)
     return res
 
 
-def run_purchase(base_url: str, *, budget_paise: int, label: str, basket_builder=build_basket) -> dict:
+def run_purchase(base_url: str, headers: dict, *, budget_paise: int, label: str, basket_builder=build_basket) -> dict:
     _banner(f"SCENARIO: {label} (budget ₹{budget_paise / 100:.2f})")
-    _reset_cart(base_url)
     doc = discover(base_url)
     feed_items = fetch_full_feed(base_url, doc["endpoints"]["catalog_feed"])
 
@@ -206,11 +213,20 @@ def run_purchase(base_url: str, *, budget_paise: int, label: str, basket_builder
     chat_url = doc["endpoints"]["chat"]
     confirm_url = doc["endpoints"]["confirm"]
 
-    _step(f"Building a basket within budget (session {session_id})")
+    # /api/cart is BUYER-only (see backend/app/routers/cart.py) — an agent
+    # clears out any leftover cart from a prior run the same way it does
+    # everything else, through the policy-engine-fronted chat path, not a
+    # raw REST call it isn't scoped for.
+    _step(f"Clearing any existing cart via chat (session {session_id})")
+    _send(base_url, chat_url, confirm_url, session_id, "Please remove every item currently in my cart, if any.", headers)
+
+    _step("Building a basket within budget")
     running_total = 0
     last_upsell = None
     for item in basket:
-        res = _send(base_url, chat_url, confirm_url, session_id, f"Add one {item['title']} to my cart.", budget_paise)
+        res = _send(
+            base_url, chat_url, confirm_url, session_id, f"Add one {item['title']} to my cart.", headers, budget_paise
+        )
         running_total = res["cart"]["total_paise"]
         print(f"  + {item['title']} (₹{item['price_paise'] / 100:.2f}) -> cart total ₹{running_total / 100:.2f}")
         if res.get("upsell"):
@@ -220,18 +236,18 @@ def run_purchase(base_url: str, *, budget_paise: int, label: str, basket_builder
     if last_upsell is not None:
         _step(f"Merchant offered an upsell: {last_upsell['name']} (₹{last_upsell['price_paise'] / 100:.2f}) — {last_upsell['reason']}")
         if running_total + last_upsell["price_paise"] <= budget_paise:
-            res = _send(base_url, chat_url, confirm_url, session_id, f"Yes, add the {last_upsell['name']} too.")
+            res = _send(base_url, chat_url, confirm_url, session_id, f"Yes, add the {last_upsell['name']} too.", headers)
             running_total = res["cart"]["total_paise"]
             upsell_accepted = res.get("upsell") is None and running_total > sum(i["price_paise"] for i in basket)
             print(f"  accepted -> cart total ₹{running_total / 100:.2f}")
         else:
-            _send(base_url, chat_url, confirm_url, session_id, "No thanks.")
+            _send(base_url, chat_url, confirm_url, session_id, "No thanks.", headers)
             print("  declined — doesn't fit the remaining budget")
     else:
         print("\n  no upsell offered this session (none allowed by policy, or none relevant).")
 
     _step("Requesting payment")
-    res = _call(base_url, "POST", chat_url, {"session_id": session_id, "message": "Pay for my cart now."})
+    res = _call(base_url, "POST", chat_url, {"session_id": session_id, "message": "Pay for my cart now."}, headers)
     if res["status"] != "awaiting_confirmation":
         print(f"  unexpected status '{res['status']}' — not proceeding to payment.")
         return {
@@ -239,7 +255,7 @@ def run_purchase(base_url: str, *, budget_paise: int, label: str, basket_builder
             "upsell_accepted": upsell_accepted, "paid": False,
         }
 
-    res = _call(base_url, "POST", confirm_url, {"session_id": session_id, "approve": True})
+    res = _call(base_url, "POST", confirm_url, {"session_id": session_id, "approve": True}, headers)
     payment = res.get("payment")
     if payment is None:
         # The Razorpay test API is occasionally slow/flaky — the same class
@@ -248,9 +264,9 @@ def run_purchase(base_url: str, *, budget_paise: int, label: str, basket_builder
         # retry path is "ask again, then confirm again" (a failed confirm
         # clears the pending state, so re-confirming directly does nothing).
         print(f"  payment was not initiated ({res['reply'][:150]!r}) — retrying once")
-        res = _call(base_url, "POST", chat_url, {"session_id": session_id, "message": "Please try paying again."})
+        res = _call(base_url, "POST", chat_url, {"session_id": session_id, "message": "Please try paying again."}, headers)
         if res.get("status") == "awaiting_confirmation":
-            res = _call(base_url, "POST", confirm_url, {"session_id": session_id, "approve": True})
+            res = _call(base_url, "POST", confirm_url, {"session_id": session_id, "approve": True}, headers)
             payment = res.get("payment")
     if payment is None:
         print(f"  payment was not initiated: {res['reply'][:200]}")
@@ -262,8 +278,13 @@ def run_purchase(base_url: str, *, budget_paise: int, label: str, basket_builder
 
     # NOT part of the discovered contract — see the module docstring. A real
     # external buyer would complete Razorpay Checkout in a browser here.
+    # AGENT-authorized (unlike /api/payments/verify and /failed, which stay
+    # BUYER-only for the real browser callback) precisely so this headless
+    # agent can reach it — see backend/app/routers/payments.py.
     _step("Completing payment (this project's headless test-complete endpoint — see module docstring)")
-    result = _call(base_url, "POST", "/api/payments/test-complete", {"razorpay_order_id": payment["razorpay_order_id"]})
+    result = _call(
+        base_url, "POST", "/api/payments/test-complete", {"razorpay_order_id": payment["razorpay_order_id"]}, headers
+    )
     print(f"  {result['status']}: {result['message']}")
 
     return {
@@ -275,11 +296,11 @@ def run_purchase(base_url: str, *, budget_paise: int, label: str, basket_builder
     }
 
 
-def report(base_url: str, session_id: str | None) -> None:
+def report(base_url: str, headers: dict, session_id: str | None) -> None:
     if session_id is None:
         return
-    _step(f"Audit trail totals for {session_id} (public endpoint — no internal access needed to read this either)")
-    trail = _call(base_url, "GET", f"/api/audit/{session_id}")
+    _step(f"Audit trail totals for {session_id} (this agent's own credential may read its own runs — see backend/app/routers/audit.py)")
+    trail = _call(base_url, "GET", f"/api/audit/{session_id}", headers=headers)
     totals = trail["totals"]
     print(
         f"  upsells: proposed={totals['upsell_proposed_count']} accepted={totals['upsell_accepted_count']} "
@@ -294,9 +315,24 @@ def report(base_url: str, session_id: str | None) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="External AI buyer agent — discovers and buys from the merchant over its public API only.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8842")
+    parser.add_argument(
+        "--agent-key",
+        default=os.environ.get("AGENT_API_KEY", ""),
+        help="EXTERNAL-mode agent credential key (X-Agent-Key). Defaults to $AGENT_API_KEY. "
+        "Mint one with: python backend/scripts/create_agent_credential.py",
+    )
     parser.add_argument("--budget-paise", type=int, default=300_000, help="Budget for the generous-scenario run (default ₹3,000).")
     parser.add_argument("--tight-budget-paise", type=int, default=78_000, help="Budget for the upsell-blocked scenario (default ₹780).")
     args = parser.parse_args()
+
+    if not args.agent_key:
+        print(
+            "No agent credential provided. Set AGENT_API_KEY or pass --agent-key.\n"
+            "Mint one with: python backend/scripts/create_agent_credential.py",
+            file=sys.stderr,
+        )
+        return 1
+    headers = {"X-Agent-Key": args.agent_key}
 
     try:
         _call(args.base_url, "GET", "/health")
@@ -304,16 +340,19 @@ def main() -> int:
         print(f"Merchant not reachable at {args.base_url}: {e}", file=sys.stderr)
         return 1
 
-    outcome_1 = run_purchase(args.base_url, budget_paise=args.budget_paise, label="generous budget, accept a fitting upsell")
-    report(args.base_url, outcome_1["session_id"])
+    outcome_1 = run_purchase(
+        args.base_url, headers, budget_paise=args.budget_paise, label="generous budget, accept a fitting upsell"
+    )
+    report(args.base_url, headers, outcome_1["session_id"])
 
     outcome_2 = run_purchase(
         args.base_url,
+        headers,
         budget_paise=args.tight_budget_paise,
         label="tight budget — any upsell should be blocked",
         basket_builder=build_tightest_single_item_basket,
     )
-    report(args.base_url, outcome_2["session_id"])
+    report(args.base_url, headers, outcome_2["session_id"])
 
     _banner("Summary")
     print(f"Scenario 1 — bought {len(outcome_1['bought'])} item(s), paid={outcome_1['paid']}, upsell_accepted={outcome_1['upsell_accepted']}")

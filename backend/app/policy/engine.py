@@ -1,10 +1,13 @@
 from app.core.config import settings
 from app.policy.rules import (
+    AgentScopeRule,
+    AgentSpendLimitRule,
     ConfirmationThresholdRule,
     DuplicatePaymentRule,
     PaymentAuthorizationRule,
     PerItemPriceRule,
     QuantityRule,
+    RevokedCredentialRule,
     Rule,
     SpendCapRule,
     StockRule,
@@ -46,14 +49,21 @@ def default_policy_engine() -> PolicyEngine:
     per_item_price = PerItemPriceRule(settings.policy_per_item_max_paise)
     quantity = QuantityRule(settings.policy_quantity_max)
     spend_cap = SpendCapRule(settings.policy_default_spend_cap_paise)
+    agent_spend_limit = AgentSpendLimitRule()
 
     return PolicyEngine(
         rules=[
+            # Agent-only, no-ops for a human buyer (see policy/rules.py) —
+            # registered first so a revoked or out-of-scope agent is
+            # refused before its cart math is ever considered.
+            RevokedCredentialRule(),
+            AgentScopeRule(),
             unknown_sku,
             stock,
             per_item_price,
             quantity,
             spend_cap,
+            agent_spend_limit,
             # Upsell-specific constraints, evaluated only for a synthesized
             # propose_upsell action — the item-level rules above already gate
             # its price/stock/quantity/spend-cap exactly like a real add.
@@ -64,6 +74,20 @@ def default_policy_engine() -> PolicyEngine:
             # rules above — one set of thresholds, no duplicated logic. Not
             # UpsellPolicyRule: by payment time an accepted upsell is just an
             # ordinary cart line, no different from anything else in it.
-            PaymentAuthorizationRule(item_rules=[unknown_sku, stock, per_item_price, quantity, spend_cap]),
+            # RevokedCredentialRule/AgentScopeRule/AgentSpendLimitRule ARE
+            # included — an agent revoked between adding items and
+            # confirming payment must be caught here too.
+            PaymentAuthorizationRule(
+                item_rules=[
+                    RevokedCredentialRule(),
+                    AgentScopeRule(),
+                    unknown_sku,
+                    stock,
+                    per_item_price,
+                    quantity,
+                    spend_cap,
+                    agent_spend_limit,
+                ]
+            ),
         ]
     )

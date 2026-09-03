@@ -30,3 +30,15 @@ class AuditRepository:
         that gaps get noticed across every shopper's session, not one."""
         stmt = select(AuditEvent).where(AuditEvent.event_type == event_type).order_by(AuditEvent.id)
         return list(db.scalars(stmt))
+
+    def list_by_principal(self, db: Session, principal_type: str, principal_id: str, *, limit: int = 50) -> list[AuditEvent]:
+        """Cross-session, like list_by_event_type — an agent's "recent
+        actions" (Layer 4.7) span every session a "Run now" ever created,
+        not one."""
+        stmt = (
+            select(AuditEvent)
+            .where(AuditEvent.principal_type == principal_type, AuditEvent.principal_id == principal_id)
+            .order_by(AuditEvent.id.desc())
+            .limit(limit)
+        )
+        return list(db.scalars(stmt))

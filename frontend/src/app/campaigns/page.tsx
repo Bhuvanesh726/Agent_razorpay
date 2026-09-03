@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchCampaign, fetchCampaigns, fetchContentGaps, fetchSegments } from "@/lib/api";
 import type { CampaignDetail, CampaignSummary, ContentGap, Segment } from "@/lib/types";
+import RequireAuth from "@/components/RequireAuth";
 
 function paise(p: number): string {
   return `₹${(p / 100).toFixed(2)}`;
@@ -20,7 +21,7 @@ function DecisionBadge({ decision }: { decision: string | null }) {
   return <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${style}`}>{decision}</span>;
 }
 
-export default function CampaignsPage() {
+function CampaignsPageInner() {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
   const [contentGaps, setContentGaps] = useState<ContentGap[]>([]);
@@ -262,5 +263,13 @@ export default function CampaignsPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function CampaignsPage() {
+  return (
+    <RequireAuth allow={["merchant"]}>
+      <CampaignsPageInner />
+    </RequireAuth>
   );
 }

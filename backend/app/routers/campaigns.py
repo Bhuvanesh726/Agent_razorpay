@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.audit.service import AuditService
+from app.auth.routing import AuthRequirement, SecureAPIRoute, requires
 from app.campaigns import segmentation, service
 from app.campaigns.generator import get_generation_meta
 from app.core.config import settings
@@ -25,7 +26,10 @@ from app.schemas.campaigns import (
 
 _audit = AuditService()
 
-router = APIRouter(tags=["campaigns"])
+# Merchant-only, every endpoint here — campaign offers carry cogs_paise
+# (cost) and margin-bearing decisions that must never reach a buyer or
+# agent response (see docs/045-catalog.md / Layer 4.7 spec).
+router = APIRouter(tags=["campaigns"], route_class=SecureAPIRoute)
 
 
 def _to_summary(run) -> CampaignSummaryOut:
@@ -40,6 +44,7 @@ def _to_summary(run) -> CampaignSummaryOut:
 
 
 @router.get("/api/campaigns/segments", response_model=list[SegmentOut])
+@requires(AuthRequirement.MERCHANT)
 def list_segments(db: Session = Depends(get_db)) -> list[SegmentOut]:
     meta = get_generation_meta(db)
     if meta is None:
@@ -58,11 +63,13 @@ def list_segments(db: Session = Depends(get_db)) -> list[SegmentOut]:
 
 
 @router.get("/api/campaigns", response_model=list[CampaignSummaryOut])
+@requires(AuthRequirement.MERCHANT)
 def list_campaigns(db: Session = Depends(get_db)) -> list[CampaignSummaryOut]:
     return [_to_summary(run) for run in service.list_campaign_runs(db)]
 
 
 @router.get("/api/campaigns/content-gaps", response_model=list[ContentGapOut])
+@requires(AuthRequirement.MERCHANT)
 def list_content_gaps(db: Session = Depends(get_db)) -> list[ContentGapOut]:
     """Registered before /api/campaigns/{campaign_id} on purpose — a
     static path must be matched before a path parameter can shadow it."""
@@ -70,6 +77,7 @@ def list_content_gaps(db: Session = Depends(get_db)) -> list[ContentGapOut]:
 
 
 @router.get("/api/campaigns/{campaign_id}", response_model=CampaignDetailOut)
+@requires(AuthRequirement.MERCHANT)
 def get_campaign(campaign_id: str, db: Session = Depends(get_db)) -> CampaignDetailOut:
     run = service.get_campaign_run(db, campaign_id)
     if run is None:

@@ -9,9 +9,12 @@ import pytest
 
 from app.policy.engine import PolicyEngine, default_policy_engine
 from app.policy.rules import (
+    AgentScopeRule,
+    AgentSpendLimitRule,
     ConfirmationThresholdRule,
     PerItemPriceRule,
     QuantityRule,
+    RevokedCredentialRule,
     SpendCapRule,
     StockRule,
     UnknownSkuRule,
@@ -324,3 +327,117 @@ def test_upsell_item_level_rules_apply_to_propose_upsell_too():
     result = engine.evaluate(over_budget)  # 480000 + 24900 > 500000
     assert result.decision == Decision.DENY
     assert result.rule_name == "SpendCapRule"
+
+
+# --- Layer 4.7: agent-only rules -------------------------------------------
+
+
+def make_agent_action(**overrides) -> ProposedCartState:
+    defaults = dict(
+        acting_agent_credential_id="agent_abc123",
+        agent_credential_status="ACTIVE",
+        agent_scopes=frozenset({"search_products", "get_product", "add_to_cart", "view_cart", "initiate_payment"}),
+        agent_spend_limit_paise=50_000,
+        agent_spent_paise=0,
+    )
+    defaults.update(overrides)
+    return make_action(**defaults)
+
+
+def test_agent_rules_are_no_ops_for_a_human_buyer_action():
+    # No acting_agent_credential_id at all -> every agent rule stays silent.
+    action = make_action()
+    assert RevokedCredentialRule().evaluate(action) is None
+    assert AgentScopeRule().evaluate(action) is None
+    assert AgentSpendLimitRule().evaluate(action) is None
+
+
+def test_revoked_credential_denied_immediately():
+    rule = RevokedCredentialRule()
+    result = rule.evaluate(make_agent_action(agent_credential_status="REVOKED"))
+    assert result is not None
+    assert result.decision == Decision.DENY
+    assert result.rule_name == "RevokedCredentialRule"
+    assert "agent_abc123" in result.reason
+
+
+def test_revoked_credential_check_applies_to_non_cart_tools_too():
+    """A revoked agent can't even browse — the rule doesn't key off
+    CART_MUTATING_TOOLS at all."""
+    rule = RevokedCredentialRule()
+    action = make_agent_action(agent_credential_status="REVOKED", tool_name="view_cart", sku=None, product=None, quantity=None)
+    result = rule.evaluate(action)
+    assert result is not None
+    assert result.decision == Decision.DENY
+
+
+def test_active_credential_allowed_by_revoked_rule():
+    rule = RevokedCredentialRule()
+    assert rule.evaluate(make_agent_action(agent_credential_status="ACTIVE")) is None
+
+
+def test_agent_scope_rule_allows_a_scoped_tool():
+    rule = AgentScopeRule()
+    action = make_agent_action(agent_scopes=frozenset({"add_to_cart"}))
+    assert rule.evaluate(action) is None
+
+
+def test_agent_scope_rule_denies_an_unscoped_tool():
+    rule = AgentScopeRule()
+    action = make_agent_action(agent_scopes=frozenset({"search_products", "view_cart"}))  # no add_to_cart
+    result = rule.evaluate(action)
+    assert result is not None
+    assert result.decision == Decision.DENY
+    assert result.rule_name == "AgentScopeRule"
+    assert "add_to_cart" in result.reason
+
+
+def test_agent_spend_limit_allows_within_limit():
+    rule = AgentSpendLimitRule()
+    # PET-001 costs 74000 paise, over the default 50_000 limit -> use a cheaper line
+    cheap = CatalogProductSnapshot(sku="GRO-004", price_paise=2_800, stock=100)
+    action = make_agent_action(product=cheap, sku=cheap.sku, agent_spend_limit_paise=50_000, agent_spent_paise=0)
+    assert rule.evaluate(action) is None
+
+
+def test_agent_spend_limit_denies_once_projected_total_exceeds_limit():
+    rule = AgentSpendLimitRule()
+    # already "spent" 480 in prior turns/sessions; this add (740) would push
+    # the credential's cumulative total to 1220, over its 500-paise... use realistic units:
+    action = make_agent_action(agent_spend_limit_paise=50_000, agent_spent_paise=0)  # PET-001 = 74000 > 50000
+    result = rule.evaluate(action)
+    assert result is not None
+    assert result.decision == Decision.DENY
+    assert result.rule_name == "AgentSpendLimitRule"
+
+
+def test_agent_spend_limit_blocks_even_when_session_budget_is_higher():
+    """The DoD scenario itself: a ₹500 credential limit blocks an add that
+    a much larger session budget would otherwise allow."""
+    cheap = CatalogProductSnapshot(sku="GRO-004", price_paise=45_000, stock=100)  # ₹450, fits an unlimited session budget
+    action = make_agent_action(
+        product=cheap, sku=cheap.sku, quantity=1,
+        budget_paise=500_000,  # generous session budget — SpendCapRule alone would allow this
+        agent_spend_limit_paise=50_000, agent_spent_paise=10_000,  # already ₹100 spent; +₹450 = ₹550 > ₹500 limit
+    )
+    engine = default_policy_engine()
+    result = engine.evaluate(action)
+    assert result.decision == Decision.DENY
+    assert result.rule_name == "AgentSpendLimitRule"
+
+
+def test_agent_spend_limit_ignores_non_cart_tools():
+    rule = AgentSpendLimitRule()
+    action = make_agent_action(tool_name="view_cart", sku=None, product=None, quantity=None, agent_spend_limit_paise=100)
+    assert rule.evaluate(action) is None
+
+
+def test_revoked_credential_wins_over_scope_and_spend_in_registration_order():
+    engine = default_policy_engine()
+    action = make_agent_action(
+        agent_credential_status="REVOKED",
+        agent_scopes=frozenset(),  # would also fail AgentScopeRule
+        agent_spend_limit_paise=1,  # would also fail AgentSpendLimitRule
+    )
+    result = engine.evaluate(action)
+    assert result.rule_name == "RevokedCredentialRule"

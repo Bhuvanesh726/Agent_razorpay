@@ -112,8 +112,13 @@ cd frontend
 npm run dev
 ```
 
-Then open http://localhost:3000. The API runs at http://127.0.0.1:8842 and
-its interactive docs are at http://127.0.0.1:8842/docs.
+Then open http://127.0.0.1:3000 — not `localhost:3000` (Layer 4.7 pins the
+frontend origin, CORS, and OAuth to `FRONTEND_URL` in `.env`, `127.0.0.1:3000`
+by default; on machines where `localhost` resolves to `::1` while the dev
+server only binds IPv4, `localhost:3000` fails outright rather than just
+misbehaving — see docs/047-principals.md). The API runs at
+http://127.0.0.1:8842 and its interactive docs are at
+http://127.0.0.1:8842/docs.
 
 ## Endpoints
 

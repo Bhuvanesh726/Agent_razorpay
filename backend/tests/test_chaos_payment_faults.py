@@ -12,6 +12,7 @@ import json
 from unittest.mock import patch
 
 from app.agent import harness
+from app.auth.principal import Principal
 from app.core.config import settings
 from app.llm.gateway import GatewayResult
 from app.llm.gateway import ToolCall as GatewayToolCall
@@ -178,6 +179,7 @@ def test_tampered_signature_rejects_even_a_correctly_computed_signature(db_sessi
         result = verify_payment(
             VerifyPaymentRequest(razorpay_order_id="order_chaos_sig1", razorpay_payment_id=payment_id, razorpay_signature=real_signature),
             types.SimpleNamespace(state=types.SimpleNamespace()),
+            Principal(type="buyer", user_id="user_demo", role="BUYER"),
             db_session,
         )
 

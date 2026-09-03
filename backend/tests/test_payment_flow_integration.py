@@ -14,6 +14,7 @@ import types
 from unittest.mock import patch
 
 from app.agent import harness
+from app.auth.principal import Principal
 from app.core.config import settings
 from app.llm.gateway import GatewayResult
 from app.llm.gateway import ToolCall as GatewayToolCall
@@ -63,6 +64,10 @@ def _final_response(content: str) -> GatewayResult:
 
 def _fake_request():
     return types.SimpleNamespace(state=types.SimpleNamespace())
+
+
+def _buyer_principal(user_id: str = "user_demo") -> Principal:
+    return Principal(type="buyer", user_id=user_id, role="BUYER")
 
 
 def _sign(order_id: str, payment_id: str) -> str:
@@ -121,6 +126,7 @@ def test_full_payment_flow_succeeds_and_resets_cart(db_session):
     result = verify_payment(
         VerifyPaymentRequest(razorpay_order_id="order_rzp_fake1", razorpay_payment_id=payment_id, razorpay_signature=signature),
         _fake_request(),
+        _buyer_principal(),
         db_session,
     )
     assert result.status == "PAID"
@@ -160,8 +166,8 @@ def test_double_verify_call_does_not_double_charge(db_session):
         razorpay_order_id="order_rzp_fake2", razorpay_payment_id=payment_id, razorpay_signature=signature
     )
 
-    first = verify_payment(payload, _fake_request(), db_session)
-    second = verify_payment(payload, _fake_request(), db_session)  # simulates a rapid double-click / retry
+    first = verify_payment(payload, _fake_request(), _buyer_principal(), db_session)
+    second = verify_payment(payload, _fake_request(), _buyer_principal(), db_session)  # simulates a rapid double-click / retry
 
     assert first.status == "PAID"
     assert second.status == "PAID"
@@ -189,6 +195,7 @@ def test_tampered_signature_is_rejected_and_order_fails(db_session):
             razorpay_order_id="order_rzp_fake3", razorpay_payment_id="pay_rzp_fake3", razorpay_signature="0" * 64
         ),
         _fake_request(),
+        _buyer_principal(),
         db_session,
     )
     assert result.status == "FAILED"
@@ -214,6 +221,7 @@ def test_payment_failed_endpoint_records_declined_test_card(db_session):
     result = report_payment_failed(
         PaymentFailedRequest(razorpay_order_id="order_rzp_fake4", error_code="BAD_REQUEST_ERROR", error_description="Card declined"),
         _fake_request(),
+        _buyer_principal(),
         db_session,
     )
     assert result.status == "FAILED"
@@ -272,6 +280,7 @@ def test_retry_after_failure_reuses_razorpay_order_and_leaves_failed_state(db_se
             razorpay_order_id="order_rzp_retry1", razorpay_payment_id="pay_bad", razorpay_signature="0" * 64
         ),
         _fake_request(),
+        _buyer_principal(),
         db_session,
     )
     db_session.refresh(order)
@@ -295,6 +304,7 @@ def test_retry_after_failure_reuses_razorpay_order_and_leaves_failed_state(db_se
     result = verify_payment(
         VerifyPaymentRequest(razorpay_order_id="order_rzp_retry1", razorpay_payment_id=payment_id, razorpay_signature=signature),
         _fake_request(),
+        _buyer_principal(),
         db_session,
     )
     assert result.status == "PAID"
@@ -320,7 +330,10 @@ def test_test_complete_payment_signs_and_verifies_without_caller_holding_the_sec
         from app.schemas.payments import TestCompletePaymentRequest
 
         result = complete_test_payment(
-            TestCompletePaymentRequest(razorpay_order_id="order_test_complete_1"), _fake_request(), db_session
+            TestCompletePaymentRequest(razorpay_order_id="order_test_complete_1"),
+            _fake_request(),
+            _buyer_principal(),
+            db_session,
         )
 
     assert result.status == "PAID"
@@ -335,7 +348,9 @@ def test_test_complete_payment_refused_outside_development():
 
     with patch("app.core.config.settings.app_env", "production"):
         try:
-            complete_test_payment(TestCompletePaymentRequest(razorpay_order_id="whatever"), _fake_request(), None)
+            complete_test_payment(
+                TestCompletePaymentRequest(razorpay_order_id="whatever"), _fake_request(), _buyer_principal(), None
+            )
             assert False, "expected a 404"
         except HTTPException as e:
             assert e.status_code == 404

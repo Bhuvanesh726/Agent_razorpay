@@ -9,10 +9,21 @@ import ProductGrid from "@/components/ProductGrid";
 import ProductDetailModal from "@/components/ProductDetailModal";
 import CartSidebar from "@/components/CartSidebar";
 import ChatPanel from "@/components/ChatPanel";
+import RequireAuth from "@/components/RequireAuth";
+import { useAuth } from "@/lib/auth";
 
 const CHAT_SESSION_STORAGE_KEY = "razorpay-agent-session-id";
 
 export default function Home() {
+  return (
+    <RequireAuth allow={["buyer"]}>
+      <Shop />
+    </RequireAuth>
+  );
+}
+
+function Shop() {
+  const { user, logout } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -91,13 +102,21 @@ export default function Home() {
             Browse and add manually, or ask the assistant. Every money action it takes is policy-gated and logged.
           </p>
         </div>
-        <div className="flex gap-4">
-          <a href="/campaigns" className="text-sm text-gray-500 underline hover:text-gray-800">
-            Campaigns →
+        <div className="flex items-center gap-4">
+          <a href="/agents" className="text-sm text-gray-500 underline hover:text-gray-800">
+            My agents →
           </a>
           <a href="/audit" className="text-sm text-gray-500 underline hover:text-gray-800">
             Audit trail viewer →
           </a>
+          {user && (
+            <div className="flex items-center gap-2 border-l border-gray-200 pl-4">
+              <span className="text-sm text-gray-500">{user.email}</span>
+              <button onClick={logout} className="text-sm text-gray-500 underline hover:text-gray-800">
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

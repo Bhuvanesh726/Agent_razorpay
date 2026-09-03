@@ -1,16 +1,22 @@
 import type {
   AgentChatResponse,
+  AgentCreateRequest,
+  AgentCreateResponse,
+  AgentDetail,
+  AgentSummary,
   AuditTrail,
   CampaignDetail,
   CampaignSummary,
   Cart,
   Category,
   ContentGap,
+  MeResponse,
   PaymentResult,
   ProductListResponse,
   Segment,
   SessionReplay,
 } from "./types";
+import { authHeaders } from "./auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8842";
 
@@ -23,12 +29,16 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs: number = 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
+  // Sent on every request, not just the ones that strictly need it — public
+  // endpoints (products, catalog feed) simply ignore it, and this keeps
+  // every call site below from having to remember auth individually.
+  const headers = { ...authHeaders(), ...(init?.body ? { "Content-Type": "application/json" } : {}), ...init?.headers };
+
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
-      ...(init?.body
-        ? { ...init, headers: { "Content-Type": "application/json", ...init?.headers } }
-        : init),
+      ...init,
+      headers,
       signal: controller.signal,
     });
   } catch (e) {
@@ -171,4 +181,31 @@ export function reportPaymentFailed(
       error_description: errorDescription ?? null,
     }),
   });
+}
+
+export function fetchMe(): Promise<MeResponse> {
+  return request<MeResponse>("/api/auth/me");
+}
+
+export function fetchAgents(): Promise<AgentSummary[]> {
+  return request<AgentSummary[]>("/api/agents");
+}
+
+export function fetchAgent(credentialId: string): Promise<AgentDetail> {
+  return request<AgentDetail>(`/api/agents/${credentialId}`);
+}
+
+export function createAgent(payload: AgentCreateRequest): Promise<AgentCreateResponse> {
+  return request<AgentCreateResponse>("/api/agents", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function revokeAgent(credentialId: string): Promise<AgentSummary> {
+  return request<AgentSummary>(`/api/agents/${credentialId}/revoke`, { method: "POST" });
+}
+
+export function runAgent(credentialId: string): Promise<{ reply: string; status: string; cart: Cart }> {
+  return request(`/api/agents/${credentialId}/run`, { method: "POST" }, AGENT_REQUEST_TIMEOUT_MS);
 }

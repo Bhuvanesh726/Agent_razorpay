@@ -11,7 +11,14 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
     default_user_id: str = "user_demo"
-    cors_origins: str = "http://localhost:3000"
+    # The one canonical dev frontend origin — used for CORS, OAuth origin
+    # validation, and every post-login redirect target. Deliberately a
+    # single value, not a list: `localhost` and `127.0.0.1` are different
+    # origins for cookies and CORS even on the same machine/port, and on
+    # some machines `localhost` resolves to ::1 while the dev server only
+    # binds IPv4 (ERR_FAILED) — supporting both invited exactly that class
+    # of bug. Pick one address and use it consistently everywhere.
+    frontend_url: str = "http://127.0.0.1:3000"
     database_url: str = "sqlite:///./razorpay_agent.db"
 
     # --- Layer 1: agent + policy engine ---
@@ -89,6 +96,34 @@ class Settings(BaseSettings):
     llm_circuit_breaker_failure_threshold: int = 3
     llm_circuit_breaker_cooldown_seconds: float = 30.0
 
+    # --- Layer 4.7: principals (buyer/merchant Google OAuth, agent credentials) ---
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    # NOT read by app/auth/oauth_router.py — the actual redirect_uri sent to
+    # Google is derived per-request from request.url_for(), specifically so
+    # the OAuth flow works whether the backend is reached via localhost:8842
+    # or 127.0.0.1:8842 (the SessionMiddleware cookie carrying the CSRF
+    # state is host-scoped, so login and callback must share a host, but
+    # that host doesn't have to be fixed in advance). Kept as a documentation
+    # default: register THIS value, and any other host/port you'll actually
+    # use, as separate "Authorized redirect URIs" on the Google OAuth
+    # client — Google allows more than one. See docs/047-principals.md.
+    google_redirect_uri: str = "http://localhost:8842/api/auth/google/callback"
+    jwt_secret_key: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_expires_minutes: int = 60 * 24 * 7  # 7 days — a demo session, not a production-grade lifetime
+    # Comma-separated emails that get MERCHANT on first login; anyone else
+    # who signs in becomes a BUYER. A real deployment would have an actual
+    # admin flow instead of a config allowlist — see docs/047-principals.md.
+    merchant_emails: str = ""
+    # The full list of tool names a newly-created agent may pick scopes
+    # from — one source of truth shared by the frontend's scope checkboxes
+    # and the credential-creation endpoint's validation.
+    agent_available_scopes: str = (
+        "search_products,get_product,add_to_cart,view_cart,remove_from_cart,"
+        "initiate_payment,decline_upsell,report_content_gap"
+    )
+
     model_config = SettingsConfigDict(
         env_file=_REPO_ROOT / ".env",
         env_file_encoding="utf-8",
@@ -96,8 +131,12 @@ class Settings(BaseSettings):
     )
 
     @property
-    def cors_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+    def merchant_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.merchant_emails.split(",") if e.strip()}
+
+    @property
+    def agent_available_scope_list(self) -> list[str]:
+        return [s.strip() for s in self.agent_available_scopes.split(",") if s.strip()]
 
 
 settings = Settings()

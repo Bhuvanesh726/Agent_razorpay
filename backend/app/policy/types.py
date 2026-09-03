@@ -61,6 +61,19 @@ class ProposedCartState:
     upsell_declined_skus: frozenset[str] | None = None
     upsell_original_cart_total_paise: int | None = None
 
+    # Layer 4.7: only populated when the acting principal is an agent (never
+    # for a human buyer chatting directly) — see app/policy/rules.py's
+    # RevokedCredentialRule / AgentScopeRule / AgentSpendLimitRule and
+    # docs/047-principals.md. Resolved fresh by the harness on every turn
+    # from the live AgentCredential row, never cached across turns, so a
+    # mid-session revocation or a limit crossed by an earlier turn in the
+    # same conversation is always caught by the very next tool call.
+    acting_agent_credential_id: str | None = None
+    agent_credential_status: str | None = None  # "ACTIVE" | "REVOKED"
+    agent_scopes: frozenset[str] | None = None
+    agent_spend_limit_paise: int | None = None
+    agent_spent_paise: int | None = None
+
     @property
     def line_total_paise(self) -> int | None:
         if self.product is None or self.quantity is None:

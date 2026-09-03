@@ -203,6 +203,14 @@ class PaymentAuthorizationRule(Rule):
                 product=CatalogProductSnapshot(
                     sku=line.product.sku, price_paise=line.product.price_paise, stock=line.product.stock
                 ),
+                # Propagated from the outer initiate_payment action so an
+                # agent-initiated payment re-validates revocation/scope/limit
+                # too, not just price/stock/quantity/budget.
+                acting_agent_credential_id=action.acting_agent_credential_id,
+                agent_credential_status=action.agent_credential_status,
+                agent_scopes=action.agent_scopes,
+                agent_spend_limit_paise=action.agent_spend_limit_paise,
+                agent_spent_paise=action.agent_spent_paise,
             )
             for rule in self.item_rules:
                 result = rule.evaluate(item_action)
@@ -293,5 +301,87 @@ class ConfirmationThresholdRule(Rule):
                 f"Cart total would reach ₹{action.proposed_cart_total_paise / 100:.2f}, "
                 f"above the ₹{self.threshold_paise / 100:.2f} confirmation threshold. "
                 "Please confirm before this is added.",
+            )
+        return None
+
+
+# --- Layer 4.7: agent-only rules ------------------------------------------
+#
+# All three read only fields the harness resolves fresh every turn from the
+# live AgentCredential row (never cached across turns — see
+# policy/types.py's ProposedCartState docstring) and are no-ops (return
+# None) whenever acting_agent_credential_id is unset, i.e. for every human
+# buyer action. Registered first in default_policy_engine(), ahead of
+# every item-level rule, so a revoked or out-of-scope agent is refused
+# before its cart math is even considered.
+
+
+class RevokedCredentialRule(Rule):
+    """Applies to every tool, not just money-moving ones — a revoked agent
+    can't even browse. "Denied immediately, mid-session if necessary" is
+    true here specifically because credential_status is read fresh from the
+    DB every turn, not from anything decided when the session started."""
+
+    name = "RevokedCredentialRule"
+
+    def evaluate(self, action: ProposedCartState) -> RuleResult | None:
+        if action.acting_agent_credential_id is None:
+            return None
+        if action.agent_credential_status == "REVOKED":
+            return RuleResult(
+                Decision.DENY,
+                self.name,
+                f"Credential '{action.acting_agent_credential_id}' has been revoked — no further actions are permitted.",
+            )
+        return None
+
+
+class AgentScopeRule(Rule):
+    """Also applies to every tool — an agent scoped to browsing only should
+    never reach add_to_cart, regardless of budget or margin."""
+
+    name = "AgentScopeRule"
+
+    def evaluate(self, action: ProposedCartState) -> RuleResult | None:
+        if action.acting_agent_credential_id is None or action.agent_scopes is None:
+            return None
+        if action.tool_name not in action.agent_scopes:
+            return RuleResult(
+                Decision.DENY,
+                self.name,
+                f"Credential '{action.acting_agent_credential_id}' is not scoped to call '{action.tool_name}' "
+                f"(allowed: {sorted(action.agent_scopes)}).",
+            )
+        return None
+
+
+class AgentSpendLimitRule(Rule):
+    """Independent of — and composed with, not instead of — SpendCapRule's
+    session budget: the stricter of the two wins simply because both are
+    registered and DENY beats ALLOW in the same engine, no special-casing
+    needed. Checked at add-to-cart time against a *projected* total
+    (already-spent + this session's running cart + this proposed line),
+    the same "check before it happens" shape SpendCapRule already uses —
+    not against a completed payment, so an agent's limit reserves headroom
+    the moment items are added, not only once they're actually paid for.
+    Known simplification: removing an item does not currently release the
+    reservation — see docs/047-principals.md.
+    """
+
+    name = "AgentSpendLimitRule"
+
+    def evaluate(self, action: ProposedCartState) -> RuleResult | None:
+        if action.acting_agent_credential_id is None or action.agent_spend_limit_paise is None:
+            return None
+        if action.tool_name not in CART_MUTATING_TOOLS:
+            return None
+        projected = (action.agent_spent_paise or 0) + action.proposed_cart_total_paise
+        if projected > action.agent_spend_limit_paise:
+            return RuleResult(
+                Decision.DENY,
+                self.name,
+                f"This would bring credential '{action.acting_agent_credential_id}''s total spend to "
+                f"₹{projected / 100:.2f}, exceeding its ₹{action.agent_spend_limit_paise / 100:.2f} limit — "
+                "independent of the session budget.",
             )
         return None

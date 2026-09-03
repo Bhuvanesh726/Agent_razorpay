@@ -6,6 +6,24 @@ from app.models.audit_event import AuditEvent
 _repo = AuditRepository()
 
 
+def _default_principal_fields() -> tuple[str | None, str | None]:
+    """Layer 4.7: falls back to whichever Principal is active for the
+    current request (app/auth/context.py) when a caller doesn't pass
+    principal_type/principal_id explicitly — which is every existing call
+    site in harness.py, tools.py, and campaigns/service.py. Import kept
+    local: app.auth imports from app.models, and importing it at module
+    load time here risks import-order surprises during app startup that a
+    lazy import inside one function avoids entirely."""
+    from app.auth.context import get_current_principal
+
+    principal = get_current_principal()
+    if principal is None:
+        return None, None
+    if principal.type == "agent":
+        return "agent", principal.credential_id
+    return principal.type, principal.user_id
+
+
 class AuditService:
     """Every write commits immediately, independent of whatever the caller
     does next — an audit row must survive even if the rest of the request
@@ -33,7 +51,11 @@ class AuditService:
         total_tokens: int | None = None,
         cost_paise: int | None = None,
         fallback_used: bool | None = None,
+        principal_type: str | None = None,
+        principal_id: str | None = None,
     ) -> AuditEvent:
+        if principal_type is None and principal_id is None:
+            principal_type, principal_id = _default_principal_fields()
         event = AuditEvent(
             session_id=session_id,
             user_id=user_id,
@@ -43,6 +65,8 @@ class AuditService:
             tool_args=tool_args,
             tool_result=tool_result,
             decision=decision,
+            principal_type=principal_type,
+            principal_id=principal_id,
             rule_name=rule_name,
             reason=reason,
             model_used=model_used,
@@ -61,6 +85,9 @@ class AuditService:
 
     def get_trail(self, db: Session, session_id: str) -> list[AuditEvent]:
         return _repo.list_for_session(db, session_id)
+
+    def get_agent_actions(self, db: Session, credential_id: str, *, limit: int = 50) -> list[AuditEvent]:
+        return _repo.list_by_principal(db, "agent", credential_id, limit=limit)
 
     def get_content_gaps(self, db: Session, *, sample_size: int = 3) -> list[dict]:
         """Aggregates every content_gap_reported event (see

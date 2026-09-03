@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchAuditTrail, fetchSessionReplay } from "@/lib/api";
 import type { AuditTrail, SessionReplay } from "@/lib/types";
+import RequireAuth from "@/components/RequireAuth";
 
 const DECISION_STYLES: Record<string, string> = {
   ALLOW: "bg-green-100 text-green-800",
@@ -248,8 +249,10 @@ function AuditViewerInner() {
 
 export default function AuditViewerPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-400">Loading…</div>}>
-      <AuditViewerInner />
-    </Suspense>
+    <RequireAuth>
+      <Suspense fallback={<div className="p-6 text-sm text-gray-400">Loading…</div>}>
+        <AuditViewerInner />
+      </Suspense>
+    </RequireAuth>
   );
 }

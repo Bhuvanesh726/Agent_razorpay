@@ -49,3 +49,15 @@ class AuditEvent(Base):
     # Recorded at write time rather than re-derived from current config later,
     # so a config change never reinterprets historical audit rows.
     fallback_used: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    # Layer 4.7: who/what actually authorized this event, distinct from
+    # `actor` (which step of the harness produced it — "agent"/"policy"/
+    # "system"/"user") and distinct from `user_id` (whose data this is —
+    # for an agent's action, the OWNING buyer, unchanged). "buyer" |
+    # "merchant" | "agent" | null (events from before this layer, or system
+    # events with no single responsible principal). principal_id is the
+    # User.id for a human or the AgentCredential.id for an agent — so "agent
+    # X acting for buyer Y" is principal_type="agent", principal_id=X,
+    # user_id=Y, all on the same row.
+    principal_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    principal_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

@@ -7,11 +7,13 @@ from app.campaigns.models import (
     HistoricalOrderItem,
     ProductView,
 )
+from app.models.agent_credential import AgentCredential
 from app.models.agent_session import AgentMessage, AgentSession
 from app.models.audit_event import AuditEvent
 from app.models.cart import Cart, CartItem
 from app.models.order import Order, Payment
 from app.models.product import Product
+from app.models.user import User
 
 __all__ = [
     "Product",
@@ -29,4 +31,6 @@ __all__ = [
     "CampaignRun",
     "CampaignOffer",
     "ProductView",
+    "User",
+    "AgentCredential",
 ]

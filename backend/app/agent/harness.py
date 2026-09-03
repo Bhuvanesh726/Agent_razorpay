@@ -21,9 +21,11 @@ from sqlalchemy.orm import Session
 
 from app.agent.tools import TOOL_FUNCTIONS, TOOL_SCHEMAS
 from app.audit.service import AuditService
+from app.auth.context import get_current_principal
 from app.core.config import settings
 from app.core.logging import logger
 from app.llm.gateway import GatewayError, ToolCall as GatewayToolCall, gateway
+from app.models.agent_credential import AgentCredential
 from app.orders import repository as order_repo
 from app.orders.idempotency import compute_idempotency_key
 from app.policy.engine import default_policy_engine
@@ -73,6 +75,15 @@ _audit = AuditService()
 _policy = default_policy_engine()
 
 
+class SessionOwnershipError(Exception):
+    """Raised when the calling principal's user_id doesn't match an
+    existing session's owner. Without this check, get_or_create_session()
+    (keyed on session_id alone) would let one buyer operate on another
+    buyer's real cart simply by reusing or guessing their session_id — a
+    real cross-user gap found and closed in Layer 4.7, not a hypothetical
+    one. Routers translate this into a 403; see app/routers/agent.py."""
+
+
 @dataclass
 class HarnessResult:
     reply: str
@@ -99,6 +110,8 @@ def handle_chat(
     request_id: str | None,
 ) -> HarnessResult:
     session = agent_session_repo.get_or_create_session(db, session_id, user_id, budget_paise)
+    if session.user_id != user_id:
+        raise SessionOwnershipError(f"Session '{session_id}' does not belong to this principal.")
     db.commit()
 
     if session.status == "awaiting_confirmation":
@@ -138,6 +151,8 @@ def handle_confirm(
             cart=_cart_dict(db, user_id),
             upsell=_upsell_dict(db, session_id),
         )
+    if session.user_id != user_id:
+        raise SessionOwnershipError(f"Session '{session_id}' does not belong to this principal.")
 
     pending = session.pending_tool_call
     tool_name = pending["name"]
@@ -182,6 +197,7 @@ def handle_confirm(
 
     result = _execute_tool(db, user_id, session_id, tool_name, arguments)
     if tool_name == "add_to_cart" and "error" not in result:
+        _maybe_record_agent_spend(db, arguments, result)
         result = _process_add_to_cart_upsell(db, session, arguments, result, request_id)
     agent_session_repo.append_message(
         db, session_id, "tool", content=json.dumps(result), tool_call_id=tool_call_id, tool_name=tool_name
@@ -418,6 +434,7 @@ def _handle_tool_call(db: Session, session, tc: GatewayToolCall, request_id: str
     # ALLOW
     result = _execute_tool(db, user_id, session_id, tc.name, args)
     if tc.name == "add_to_cart" and "error" not in result:
+        _maybe_record_agent_spend(db, args, result)
         result = _process_add_to_cart_upsell(db, session, args, result, request_id)
     agent_session_repo.append_message(
         db, session_id, "tool", content=json.dumps(result), tool_call_id=tc.id, tool_name=tc.name
@@ -522,9 +539,33 @@ def _coerce_positive_int(value) -> int | None:
     return coerced if coerced >= 0 else None
 
 
+def _agent_policy_fields(db: Session) -> dict:
+    """Populated only when the current request's Principal (see
+    app/auth/context.py) is an agent — always re-read fresh from the DB by
+    credential id, never from the Principal's own cached fields, so a
+    revocation or a spend change from an earlier tool call in this same
+    turn is visible to the very next policy evaluation, not just the next
+    HTTP request. Returns an empty dict for a human buyer, so callers can
+    always do `ProposedCartState(..., **_agent_policy_fields(db))`."""
+    principal = get_current_principal()
+    if principal is None or principal.type != "agent" or principal.credential_id is None:
+        return {}
+    cred = db.get(AgentCredential, principal.credential_id)
+    if cred is None:
+        return {}
+    return {
+        "acting_agent_credential_id": cred.id,
+        "agent_credential_status": cred.status,
+        "agent_scopes": frozenset(cred.scopes or []),
+        "agent_spend_limit_paise": cred.spend_limit_paise,
+        "agent_spent_paise": cred.spent_paise,
+    }
+
+
 def _build_proposed_state(db: Session, session, tool_name: str, args: dict) -> ProposedCartState:
     cart = cart_repo.get_or_create_active_cart(db, session.user_id)
     current_total = sum(item.unit_price_paise * item.quantity for item in cart.items)
+    agent_fields = _agent_policy_fields(db)
 
     if tool_name == "initiate_payment":
         # Price uses the cart's snapshot (what will actually be charged —
@@ -547,6 +588,7 @@ def _build_proposed_state(db: Session, session, tool_name: str, args: dict) -> P
             current_cart_total_paise=current_total,
             cart_line_items=cart_line_items,
             existing_order_status=_existing_order_status(session.user_id, cart, db),
+            **agent_fields,
         )
 
     sku = args.get("sku")
@@ -566,6 +608,7 @@ def _build_proposed_state(db: Session, session, tool_name: str, args: dict) -> P
         sku=sku,
         quantity=quantity,
         product=product_snapshot,
+        **agent_fields,
     )
 
 
@@ -603,6 +646,33 @@ def _pending_dict(session) -> dict:
 
 def _cart_dict(db: Session, user_id: str) -> dict:
     return cart_service.get_cart(db, user_id).model_dump(mode="json")
+
+
+def _maybe_record_agent_spend(db: Session, args: dict, result: dict) -> None:
+    """Reserves against the acting agent's credential limit the moment an
+    add succeeds — a no-op for a human buyer (no current agent principal).
+    Uses the price actually charged (from the executed result), not the
+    catalog price at proposal time, same discipline as upsell acceptance
+    tracking. Known simplification, documented in policy/rules.py's
+    AgentSpendLimitRule and docs/047-principals.md: removing the item
+    afterward does not currently release this reservation."""
+    principal = get_current_principal()
+    if principal is None or principal.type != "agent" or principal.credential_id is None:
+        return
+    sku = args.get("sku")
+    quantity = args.get("quantity", 1)
+    charged_price = None
+    for line in result.get("items", []):
+        if line.get("sku") == sku:
+            charged_price = line.get("unit_price_paise")
+            break
+    if charged_price is None:
+        return
+    cred = db.get(AgentCredential, principal.credential_id)
+    if cred is None:
+        return
+    cred.spent_paise += charged_price * quantity
+    db.commit()
 
 
 def _process_add_to_cart_upsell(
