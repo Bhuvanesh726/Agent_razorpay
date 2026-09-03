@@ -22,6 +22,10 @@ from app.orders.state_machine import OrderStatus
 from app.payments.gateway import RazorpayOrder
 from app.repositories import product_repo
 from app.routers.payments import report_payment_failed, verify_payment
+# Aliased on import: a bare `test_complete_payment` name would be collected by
+# pytest as a test function (it matches the test_* pattern) and fail — it's
+# a FastAPI endpoint that requires arguments, not a test.
+from app.routers.payments import test_complete_payment as complete_test_payment
 from app.schemas.payments import PaymentFailedRequest, VerifyPaymentRequest
 
 
@@ -296,3 +300,42 @@ def test_retry_after_failure_reuses_razorpay_order_and_leaves_failed_state(db_se
     assert result.status == "PAID"
     db_session.refresh(order)
     assert order.status == OrderStatus.PAID.value
+
+
+def test_test_complete_payment_signs_and_verifies_without_caller_holding_the_secret(db_session):
+    """The dev-only /api/payments/test-complete endpoint (Layer 4.5,
+    buyer_agent/) — signs a synthetic callback server-side and then runs it
+    through the exact same verify_payment() as a real Checkout callback
+    would. Only the signing is a shortcut; the real HMAC verification code
+    still runs, unmodified."""
+    seed_pedigree(db_session)
+    from app.schemas.cart import CartItemCreate
+    from app.services import cart_service
+
+    cart_service.add_item(db_session, "user_demo", CartItemCreate(sku="PET-001", quantity=1))
+    confirmed = _propose_and_confirm_payment(db_session, "sess-test-complete-1", 100_000, "order_test_complete_1")
+    assert confirmed.payment is not None
+
+    with patch("app.core.config.settings.app_env", "development"):
+        from app.schemas.payments import TestCompletePaymentRequest
+
+        result = complete_test_payment(
+            TestCompletePaymentRequest(razorpay_order_id="order_test_complete_1"), _fake_request(), db_session
+        )
+
+    assert result.status == "PAID"
+    order = order_repo.find_by_razorpay_order_id(db_session, "order_test_complete_1")
+    assert order.status == OrderStatus.PAID.value
+
+
+def test_test_complete_payment_refused_outside_development():
+    from fastapi import HTTPException
+
+    from app.schemas.payments import TestCompletePaymentRequest
+
+    with patch("app.core.config.settings.app_env", "production"):
+        try:
+            complete_test_payment(TestCompletePaymentRequest(razorpay_order_id="whatever"), _fake_request(), None)
+            assert False, "expected a 404"
+        except HTTPException as e:
+            assert e.status_code == 404

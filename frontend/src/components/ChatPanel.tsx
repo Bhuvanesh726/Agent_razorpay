@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { confirmPendingAction, fetchAuditTrail, reportPaymentFailed, sendAgentMessage, verifyPayment } from "@/lib/api";
-import type { AuditTrail, ChatMessage, PaymentInfo, PendingAction } from "@/lib/types";
+import type { AuditTrail, ChatMessage, PaymentInfo, PendingAction, UpsellOffer } from "@/lib/types";
 
 interface Props {
   onCartChanged: () => void;
@@ -70,6 +70,8 @@ export default function ChatPanel({ onCartChanged }: Props) {
   const [sending, setSending] = useState(false);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [upsell, setUpsell] = useState<UpsellOffer | null>(null);
+  const [respondingToUpsell, setRespondingToUpsell] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAudit, setShowAudit] = useState(false);
   const [auditTrail, setAuditTrail] = useState<AuditTrail | null>(null);
@@ -155,6 +157,7 @@ export default function ChatPanel({ onCartChanged }: Props) {
       const res = await sendAgentMessage(sessionId, text, budgetLocked ? undefined : budgetPaise);
       pushMessage("assistant", res.reply);
       setPending(res.pending);
+      setUpsell(res.upsell);
       onCartChanged();
       if (showAudit) refreshAudit();
       if (res.payment) openCheckout(res.payment);
@@ -172,6 +175,7 @@ export default function ChatPanel({ onCartChanged }: Props) {
       const res = await confirmPendingAction(sessionId, approve);
       pushMessage("assistant", res.reply);
       setPending(res.pending);
+      setUpsell(res.upsell);
       onCartChanged();
       if (showAudit) refreshAudit();
       if (res.payment) openCheckout(res.payment);
@@ -179,6 +183,27 @@ export default function ChatPanel({ onCartChanged }: Props) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setConfirming(false);
+    }
+  }
+
+  async function respondToUpsell(accept: boolean) {
+    if (!upsell) return;
+    const text = accept ? `Yes, add the ${upsell.name} too.` : "No thanks, I don't want that.";
+    setRespondingToUpsell(true);
+    setError(null);
+    pushMessage("user", text);
+    try {
+      const res = await sendAgentMessage(sessionId, text);
+      pushMessage("assistant", res.reply);
+      setPending(res.pending);
+      setUpsell(res.upsell);
+      onCartChanged();
+      if (showAudit) refreshAudit();
+      if (res.payment) openCheckout(res.payment);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRespondingToUpsell(false);
     }
   }
 
@@ -276,6 +301,32 @@ export default function ChatPanel({ onCartChanged }: Props) {
         </div>
       )}
 
+      {upsell && !pending && (
+        <div className="rounded-md border border-indigo-300 bg-indigo-50 p-3 text-sm">
+          <p className="font-medium text-indigo-900">Suggested add-on</p>
+          <p className="mt-1 text-indigo-800">
+            {upsell.name} — ₹{(upsell.price_paise / 100).toFixed(2)}
+          </p>
+          <p className="mt-1 text-xs text-indigo-500">{upsell.reason}</p>
+          <div className="mt-2 flex gap-2">
+            <button
+              onClick={() => respondToUpsell(true)}
+              disabled={respondingToUpsell}
+              className="rounded-md bg-black px-3 py-1 text-xs text-white disabled:opacity-40"
+            >
+              Add it
+            </button>
+            <button
+              onClick={() => respondToUpsell(false)}
+              disabled={respondingToUpsell}
+              className="rounded-md border border-gray-300 px-3 py-1 text-xs disabled:opacity-40"
+            >
+              No thanks
+            </button>
+          </div>
+        </div>
+      )}
+
       {payingOrderId != null && (
         <p className="text-xs text-gray-400">Waiting for checkout on order #{payingOrderId}…</p>
       )}
@@ -317,6 +368,9 @@ export default function ChatPanel({ onCartChanged }: Props) {
                 <span>Prompt tokens: {auditTrail.totals.total_prompt_tokens}</span>
                 <span>Completion tokens: {auditTrail.totals.total_completion_tokens}</span>
                 <span>Cost: ₹{(auditTrail.totals.total_cost_paise / 100).toFixed(2)}</span>
+                <span>Upsells proposed: {auditTrail.totals.upsell_proposed_count}</span>
+                <span>Upsells accepted: {auditTrail.totals.upsell_accepted_count}</span>
+                <span>Upsell revenue: ₹{(auditTrail.totals.upsell_incremental_revenue_paise / 100).toFixed(2)}</span>
               </div>
 
               <div className="max-h-64 overflow-y-auto rounded-md border border-gray-200 text-xs">

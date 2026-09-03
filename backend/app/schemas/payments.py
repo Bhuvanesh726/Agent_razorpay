@@ -13,6 +13,10 @@ class PaymentFailedRequest(BaseModel):
     error_description: str | None = None
 
 
+class TestCompletePaymentRequest(BaseModel):
+    razorpay_order_id: str
+
+
 class PaymentResultOut(BaseModel):
     status: str  # "PAID" | "FAILED"
     order_id: int

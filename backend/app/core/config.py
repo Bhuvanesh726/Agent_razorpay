@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     policy_quantity_max: int = 10
     policy_confirmation_threshold_paise: int = 100_000  # ₹1,000
 
+    # --- Layer 4.5: agent-readable catalog ---
+    merchant_display_name: str = "Razorpay AI Buildathon Demo Store"
+
+    # --- Layer 4.5: bounded upsell ---
+    policy_upsell_max_per_session: int = 1  # how many upsell offers this session will ever see, regardless of outcome
+    policy_upsell_max_pct_of_cart: float = 0.50  # an offer priced above this fraction of the original cart value is blocked
+
     # --- Layer 3: chaos injection + resilience ---
     # A global, sticky fault for a demo segment (e.g. CHAOS_FAULT=SLOW_LLM).
     # Empty = off. Overridable per-request via the X-Chaos-Fault header.

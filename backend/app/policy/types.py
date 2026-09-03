@@ -54,6 +54,13 @@ class ProposedCartState:
     cart_line_items: tuple[CartLineSnapshot, ...] | None = None
     existing_order_status: str | None = None
 
+    # Only populated for tool_name == "propose_upsell" (an internal, harness-
+    # synthesized action — never something the model proposes directly).
+    # Session-derived from the audit log by the caller; see app/upsell/state.py.
+    upsell_proposed_count: int | None = None
+    upsell_declined_skus: frozenset[str] | None = None
+    upsell_original_cart_total_paise: int | None = None
+
     @property
     def line_total_paise(self) -> int | None:
         if self.product is None or self.quantity is None:

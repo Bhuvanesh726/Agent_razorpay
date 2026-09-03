@@ -28,9 +28,17 @@ class PaymentInfoOut(BaseModel):
     status: str
 
 
+class UpsellOfferOut(BaseModel):
+    sku: str
+    name: str
+    price_paise: int
+    reason: str
+
+
 class ChatResponse(BaseModel):
     reply: str
     status: str  # "completed" | "awaiting_confirmation" | "iteration_limit"
     pending: PendingActionOut | None = None
     cart: dict
     payment: PaymentInfoOut | None = None
+    upsell: UpsellOfferOut | None = None

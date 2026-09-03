@@ -17,6 +17,16 @@ from app.policy.types import CatalogProductSnapshot, Decision, ProposedCartState
 # Only these tools mutate the cart; only they carry a money decision.
 CART_MUTATING_TOOLS = {"add_to_cart"}
 PAYMENT_TOOLS = {"initiate_payment"}
+# An upsell offer is never itself a mutation (nothing is added until the user
+# accepts, which is a real add_to_cart call) — but a *candidate* offer must
+# clear every safety check a real add would, or "no special path" is a lie.
+# PRICE_CHECKED_TOOLS is what the item-level DENY rules key off of, so the
+# exact same StockRule/PerItemPriceRule/QuantityRule/SpendCapRule instances
+# gate a proposed upsell too. ConfirmationThresholdRule deliberately keeps
+# checking CART_MUTATING_TOOLS only — a mere suggestion never demands a
+# confirmation prompt; the real add (on accept) will, if it's still due one.
+UPSELL_PROPOSE_TOOLS = {"propose_upsell"}
+PRICE_CHECKED_TOOLS = CART_MUTATING_TOOLS | UPSELL_PROPOSE_TOOLS
 
 
 class Rule(ABC):
@@ -32,7 +42,7 @@ class UnknownSkuRule(Rule):
     name = "UnknownSkuRule"
 
     def evaluate(self, action: ProposedCartState) -> RuleResult | None:
-        if action.tool_name not in CART_MUTATING_TOOLS:
+        if action.tool_name not in PRICE_CHECKED_TOOLS:
             return None
         if action.sku is not None and action.product is None:
             return RuleResult(
@@ -48,7 +58,7 @@ class StockRule(Rule):
     name = "StockRule"
 
     def evaluate(self, action: ProposedCartState) -> RuleResult | None:
-        if action.tool_name not in CART_MUTATING_TOOLS:
+        if action.tool_name not in PRICE_CHECKED_TOOLS:
             return None
         if action.product is None or action.quantity is None:
             return None
@@ -69,7 +79,7 @@ class PerItemPriceRule(Rule):
     name = "PerItemPriceRule"
 
     def evaluate(self, action: ProposedCartState) -> RuleResult | None:
-        if action.tool_name not in CART_MUTATING_TOOLS:
+        if action.tool_name not in PRICE_CHECKED_TOOLS:
             return None
         if action.product is None:
             return None
@@ -90,7 +100,7 @@ class QuantityRule(Rule):
     name = "QuantityRule"
 
     def evaluate(self, action: ProposedCartState) -> RuleResult | None:
-        if action.tool_name not in CART_MUTATING_TOOLS:
+        if action.tool_name not in PRICE_CHECKED_TOOLS:
             return None
         if action.quantity is None:
             return None
@@ -119,7 +129,7 @@ class SpendCapRule(Rule):
     name = "SpendCapRule"
 
     def evaluate(self, action: ProposedCartState) -> RuleResult | None:
-        if action.tool_name not in CART_MUTATING_TOOLS:
+        if action.tool_name not in PRICE_CHECKED_TOOLS:
             return None
         cap = action.budget_paise if action.budget_paise is not None else self.default_cap_paise
         if action.proposed_cart_total_paise > cap:
@@ -214,6 +224,55 @@ class PaymentAuthorizationRule(Rule):
             f"Cart re-validated: {len(action.cart_line_items)} item(s), total "
             f"₹{running_total / 100:.2f}. Confirm to proceed to payment.",
         )
+
+
+class UpsellPolicyRule(Rule):
+    """Bounds the upsell agent specifically — separate from (and in addition
+    to) the item-level rules above, which already gate a proposed upsell's
+    price/stock/quantity/spend-cap exactly like a real add (see
+    PRICE_CHECKED_TOOLS). This rule adds the constraints that only make sense
+    for an *offer*, not a purchase: how many times this session gets asked,
+    how big an ask is reasonable relative to what's already in the cart, and
+    never re-asking about something already turned down.
+    """
+
+    def __init__(self, max_per_session: int, max_pct_of_original_cart: float):
+        self.max_per_session = max_per_session
+        self.max_pct_of_original_cart = max_pct_of_original_cart
+
+    name = "UpsellPolicyRule"
+
+    def evaluate(self, action: ProposedCartState) -> RuleResult | None:
+        if action.tool_name not in UPSELL_PROPOSE_TOOLS:
+            return None
+
+        if action.sku is not None and action.sku in (action.upsell_declined_skus or frozenset()):
+            return RuleResult(
+                Decision.DENY,
+                self.name,
+                f"SKU '{action.sku}' was already declined earlier this session — not proposing it again.",
+            )
+
+        if (action.upsell_proposed_count or 0) >= self.max_per_session:
+            return RuleResult(
+                Decision.DENY,
+                self.name,
+                f"Already proposed the maximum of {self.max_per_session} upsell(s) allowed this session.",
+            )
+
+        original = action.upsell_original_cart_total_paise
+        if original and action.line_total_paise is not None:
+            limit_paise = original * self.max_pct_of_original_cart
+            if action.line_total_paise > limit_paise:
+                return RuleResult(
+                    Decision.DENY,
+                    self.name,
+                    f"Upsell price ₹{action.line_total_paise / 100:.2f} exceeds "
+                    f"{self.max_pct_of_original_cart * 100:.0f}% of the original cart value "
+                    f"(₹{original / 100:.2f}, limit ₹{limit_paise / 100:.2f}).",
+                )
+
+        return None
 
 
 class ConfirmationThresholdRule(Rule):

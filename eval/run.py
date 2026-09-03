@@ -65,6 +65,13 @@ class ScenarioResult:
     fallback_used: bool
     reply: str
     session_id: str
+    # Independent of the base outcome above — a scenario's add_to_cart can
+    # be ALLOW while its automatically-triggered upsell offer is separately
+    # PROPOSED, BLOCKED, or (no relevant candidate / cap already hit) NONE.
+    expected_upsell: dict | None = None
+    actual_upsell_outcome: str | None = None
+    actual_upsell_sku: str | None = None
+    actual_upsell_rule: str | None = None
 
 
 def _make_db():
@@ -144,6 +151,20 @@ def _extract_outcome(events) -> tuple[str, str | None]:
     return "ASK", None
 
 
+def _extract_upsell_outcome(events) -> tuple[str, str | None, str | None]:
+    """The upsell offer (if any) that resulted from this scenario's action —
+    proposed automatically by the harness after a successful add_to_cart,
+    never something the model calls directly. Independent of _extract_outcome:
+    a scenario's base action can be ALLOW while its upsell is separately
+    PROPOSED, BLOCKED, or NONE (no candidate, or the session cap already hit)."""
+    for e in reversed(events):
+        if e.event_type == "upsell_proposed":
+            return "PROPOSED", (e.tool_args or {}).get("sku"), None
+        if e.event_type == "upsell_blocked":
+            return "BLOCKED", (e.tool_args or {}).get("sku"), e.rule_name
+    return "NONE", None, None
+
+
 def run_scenario(db, scenario: dict, *, stub: bool) -> ScenarioResult:
     user_id = "eval_user"
     session_id = f"eval-{scenario['id']}-{int(time.time() * 1000)}"
@@ -166,6 +187,15 @@ def run_scenario(db, scenario: dict, *, stub: bool) -> ScenarioResult:
     if passed and scenario.get("expected_rule"):
         passed = actual_rule == scenario["expected_rule"]
 
+    actual_upsell_outcome, actual_upsell_sku, actual_upsell_rule = _extract_upsell_outcome(events)
+    expected_upsell = scenario.get("expected_upsell")
+    if expected_upsell:
+        passed = passed and actual_upsell_outcome == expected_upsell["outcome"]
+        if passed and expected_upsell.get("sku"):
+            passed = passed and actual_upsell_sku == expected_upsell["sku"]
+        if passed and expected_upsell.get("rule"):
+            passed = passed and actual_upsell_rule == expected_upsell["rule"]
+
     return ScenarioResult(
         id=scenario["id"],
         category=scenario["category"],
@@ -181,6 +211,10 @@ def run_scenario(db, scenario: dict, *, stub: bool) -> ScenarioResult:
         fallback_used=totals["fallback_used_count"] > 0,
         reply=reply,
         session_id=session_id,
+        expected_upsell=expected_upsell,
+        actual_upsell_outcome=actual_upsell_outcome,
+        actual_upsell_sku=actual_upsell_sku,
+        actual_upsell_rule=actual_upsell_rule,
     )
 
 
@@ -210,14 +244,18 @@ def _render_markdown(results: list[ScenarioResult], meta: dict) -> str:
         "",
         "## Results",
         "",
-        "| Scenario | Category | Expected | Actual | Rule (exp/act) | Pass | Model calls | Tokens | Latency (ms) |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| Scenario | Category | Expected | Actual | Rule (exp/act) | Upsell (exp/act) | Pass | Model calls | Tokens | Latency (ms) |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         rule_pair = f"{r.expected_rule or '—'} / {r.actual_rule or '—'}"
+        if r.expected_upsell:
+            upsell_pair = f"{r.expected_upsell['outcome']} / {r.actual_upsell_outcome}"
+        else:
+            upsell_pair = "—"
         mark = "✅" if r.passed else "❌"
         lines.append(
-            f"| {r.id} | {r.category} | {r.expected_outcome} | {r.actual_outcome} | {rule_pair} | {mark} | "
+            f"| {r.id} | {r.category} | {r.expected_outcome} | {r.actual_outcome} | {rule_pair} | {upsell_pair} | {mark} | "
             f"{r.model_calls} | {r.total_tokens} | {r.total_latency_ms} |"
         )
 
@@ -225,13 +263,21 @@ def _render_markdown(results: list[ScenarioResult], meta: dict) -> str:
     if failed:
         lines += ["", "## Failed scenarios (detail)", ""]
         for r in failed:
-            lines.append(
+            detail = (
                 f"- **{r.id}**: expected `{r.expected_outcome}`"
                 + (f" ({r.expected_rule})" if r.expected_rule else "")
                 + f", got `{r.actual_outcome}`"
                 + (f" ({r.actual_rule})" if r.actual_rule else "")
-                + f" — reply: {r.reply[:200]!r}"
             )
+            if r.expected_upsell:
+                detail += (
+                    f"; upsell expected `{r.expected_upsell['outcome']}`"
+                    + (f" sku={r.expected_upsell['sku']}" if r.expected_upsell.get("sku") else "")
+                    + (f" rule={r.expected_upsell['rule']}" if r.expected_upsell.get("rule") else "")
+                    + f", got `{r.actual_upsell_outcome}` sku={r.actual_upsell_sku} rule={r.actual_upsell_rule}"
+                )
+            detail += f" — reply: {r.reply[:200]!r}"
+            lines.append(detail)
 
     return "\n".join(lines) + "\n"
 

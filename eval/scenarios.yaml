@@ -256,3 +256,43 @@
   expected_outcome: DENY
   expected_rule: PaymentAuthorizationRule
   notes: "Nothing in the cart - payment is denied outright, not even a confirmation prompt."
+
+# --- Layer 4.5: bounded upsell ---
+#
+# An upsell offer is never a model tool call - the harness proposes one
+# automatically after any successful add_to_cart (see app/upsell/). These
+# scenarios check `expected_upsell` in addition to the base action's
+# expected_outcome/expected_rule above - the two are independent facts
+# about the same run. Known gap: "a declined SKU is never re-proposed"
+# needs a second turn to demonstrate and doesn't fit this single-message
+# scenario format - covered instead by backend/tests/test_upsell.py.
+
+- id: upsell_offered_after_relevant_add
+  category: upsell
+  message: "Add one Pedigree Adult Dry Dog Food to my cart."
+  budget_paise: 500000
+  stub_tool_call: { name: add_to_cart, arguments: { sku: PET-001, quantity: 1 } }
+  expected_outcome: ALLOW
+  expected_rule: null
+  expected_upsell: { outcome: PROPOSED, sku: PET-004 }
+  notes: "PET-001 (₹740) is frequently-paired with PET-004 dentastix (₹249, 33.6% of the cart) - under the 50% UpsellPolicyRule cap and comfortably under the ₹5000 budget, so the offer is proposed."
+
+- id: upsell_blocked_by_session_budget
+  category: upsell
+  message: "Add one Mi 33W Fast Charging Adapter to my cart."
+  budget_paise: 85000
+  stub_tool_call: { name: add_to_cart, arguments: { sku: ELE-002, quantity: 1 } }
+  expected_outcome: ALLOW
+  expected_rule: null
+  expected_upsell: { outcome: BLOCKED, sku: ELE-001, rule: SpendCapRule }
+  notes: "ELE-002 (₹799) fits an ₹850 budget alone; its paired ELE-001 cable (₹299) would push the cart to ₹1098, breaching the session budget. Blocked by SpendCapRule - the same rule that gates a real add_to_cart, not an upsell-only rule (PRICE_CHECKED_TOOLS in policy/rules.py)."
+
+- id: upsell_blocked_by_pct_of_original_cart
+  category: upsell
+  message: "Add one Amul Taaza Toned Milk to my cart."
+  budget_paise: 500000
+  stub_tool_call: { name: add_to_cart, arguments: { sku: DAI-001, quantity: 1 } }
+  expected_outcome: ALLOW
+  expected_rule: null
+  expected_upsell: { outcome: BLOCKED, sku: BIS-005, rule: UpsellPolicyRule }
+  notes: "DAI-001 milk (₹74) pairs with BIS-005 biscuits (₹105) - 141.9% of the original cart value, over UpsellPolicyRule's 50% cap even though the ₹5000 session budget is nowhere close to breached. Isolates the percentage-of-cart clause specifically from SpendCapRule."

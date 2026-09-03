@@ -62,12 +62,20 @@ export interface PaymentInfo {
   status: string;
 }
 
+export interface UpsellOffer {
+  sku: string;
+  name: string;
+  price_paise: number;
+  reason: string;
+}
+
 export interface AgentChatResponse {
   reply: string;
   status: "completed" | "awaiting_confirmation" | "iteration_limit";
   pending: PendingAction | null;
   cart: Cart;
   payment: PaymentInfo | null;
+  upsell: UpsellOffer | null;
 }
 
 export interface PaymentResult {
@@ -115,6 +123,11 @@ export interface AuditTotals {
   total_tokens: number;
   total_cost_paise: number;
   fallback_used_count: number;
+  upsell_proposed_count: number;
+  upsell_accepted_count: number;
+  upsell_declined_count: number;
+  upsell_blocked_count: number;
+  upsell_incremental_revenue_paise: number;
 }
 
 export interface AuditTrail {

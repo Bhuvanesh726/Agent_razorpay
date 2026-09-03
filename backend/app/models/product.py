@@ -1,8 +1,14 @@
-from sqlalchemy import JSON, Index, Integer, String, Text
+from datetime import datetime, timezone
+
+from sqlalchemy import JSON, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import settings
 from app.database import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Product(Base):
@@ -19,6 +25,9 @@ class Product(Base):
     stock: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    # Feed freshness signal for a consuming agent's ETag/Last-Modified cache
+    # (Layer 4.5) — not used anywhere before the catalog feed.
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow)
 
     # Catalog isn't per-user yet, but every table carries user_id from day one
     # so Google OAuth (later layer) needs zero schema changes.

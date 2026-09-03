@@ -65,6 +65,10 @@ class AuditService:
     def compute_totals(self, events: list[AuditEvent]) -> dict:
         """Pure aggregation over an already-fetched trail — no DB access."""
         model_calls = [e for e in events if e.event_type == "model_call"]
+        upsell_accepted = [e for e in events if e.event_type == "upsell_accepted"]
+        incremental_revenue_paise = sum(
+            (e.tool_args or {}).get("price_paise", 0) * (e.tool_args or {}).get("quantity", 1) for e in upsell_accepted
+        )
         return {
             "total_model_calls": len(model_calls),
             "total_prompt_tokens": sum(e.prompt_tokens or 0 for e in model_calls),
@@ -72,4 +76,9 @@ class AuditService:
             "total_tokens": sum(e.total_tokens or 0 for e in model_calls),
             "total_cost_paise": sum(e.cost_paise or 0 for e in model_calls),
             "fallback_used_count": sum(1 for e in model_calls if e.fallback_used),
+            "upsell_proposed_count": sum(1 for e in events if e.event_type == "upsell_proposed"),
+            "upsell_accepted_count": len(upsell_accepted),
+            "upsell_declined_count": sum(1 for e in events if e.event_type == "upsell_declined"),
+            "upsell_blocked_count": sum(1 for e in events if e.event_type == "upsell_blocked"),
+            "upsell_incremental_revenue_paise": incremental_revenue_paise,
         }

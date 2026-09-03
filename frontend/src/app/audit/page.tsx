@@ -123,6 +123,14 @@ function AuditViewerInner() {
               Prompt / completion: <strong>{trail.totals.total_prompt_tokens} / {trail.totals.total_completion_tokens}</strong>
             </span>
             <span>Cost: <strong>₹{(trail.totals.total_cost_paise / 100).toFixed(2)}</strong></span>
+            <span>
+              Upsells: <strong>{trail.totals.upsell_proposed_count} proposed</strong>,{" "}
+              {trail.totals.upsell_accepted_count} accepted, {trail.totals.upsell_declined_count} declined,{" "}
+              {trail.totals.upsell_blocked_count} blocked
+            </span>
+            <span>
+              Upsell revenue: <strong>₹{(trail.totals.upsell_incremental_revenue_paise / 100).toFixed(2)}</strong>
+            </span>
           </div>
 
           {replay && (

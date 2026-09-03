@@ -125,6 +125,11 @@ def test_compute_totals_aggregates_only_model_call_events(db_session):
         "total_tokens": 430,
         "total_cost_paise": 43,
         "fallback_used_count": 1,
+        "upsell_proposed_count": 0,
+        "upsell_accepted_count": 0,
+        "upsell_declined_count": 0,
+        "upsell_blocked_count": 0,
+        "upsell_incremental_revenue_paise": 0,
     }
 
 
@@ -138,4 +143,9 @@ def test_compute_totals_on_empty_trail():
         "total_tokens": 0,
         "total_cost_paise": 0,
         "fallback_used_count": 0,
+        "upsell_proposed_count": 0,
+        "upsell_accepted_count": 0,
+        "upsell_declined_count": 0,
+        "upsell_blocked_count": 0,
+        "upsell_incremental_revenue_paise": 0,
     }

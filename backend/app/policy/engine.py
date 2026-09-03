@@ -9,6 +9,7 @@ from app.policy.rules import (
     SpendCapRule,
     StockRule,
     UnknownSkuRule,
+    UpsellPolicyRule,
 )
 from app.policy.types import Decision, ProposedCartState, RuleResult
 
@@ -53,10 +54,16 @@ def default_policy_engine() -> PolicyEngine:
             per_item_price,
             quantity,
             spend_cap,
+            # Upsell-specific constraints, evaluated only for a synthesized
+            # propose_upsell action — the item-level rules above already gate
+            # its price/stock/quantity/spend-cap exactly like a real add.
+            UpsellPolicyRule(settings.policy_upsell_max_per_session, settings.policy_upsell_max_pct_of_cart),
             ConfirmationThresholdRule(settings.policy_confirmation_threshold_paise),
             DuplicatePaymentRule(),
             # Re-validates the whole cart through the same DENY-capable item
-            # rules above — one set of thresholds, no duplicated logic.
+            # rules above — one set of thresholds, no duplicated logic. Not
+            # UpsellPolicyRule: by payment time an accepted upsell is just an
+            # ordinary cart line, no different from anything else in it.
             PaymentAuthorizationRule(item_rules=[unknown_sku, stock, per_item_price, quantity, spend_cap]),
         ]
     )

@@ -35,6 +35,11 @@ class AuditTotalsOut(BaseModel):
     total_tokens: int
     total_cost_paise: int
     fallback_used_count: int
+    upsell_proposed_count: int
+    upsell_accepted_count: int
+    upsell_declined_count: int
+    upsell_blocked_count: int
+    upsell_incremental_revenue_paise: int
 
 
 class AuditTrailOut(BaseModel):

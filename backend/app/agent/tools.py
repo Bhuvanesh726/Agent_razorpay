@@ -22,6 +22,7 @@ from app.repositories import cart_repo
 from app.schemas.cart import CartItemCreate
 from app.services import cart_service, product_service
 from app.testing.chaos import ChaosFault, is_active, log_injection
+from app.upsell import state as upsell_state
 
 _audit = AuditService()
 
@@ -113,6 +114,49 @@ def remove_from_cart(db: Session, user_id: str, sku: str) -> dict:
     return updated.model_dump(mode="json")
 
 
+def _auto_decline_stale_upsell(db: Session, user_id: str, session_id: str) -> None:
+    """The user moving straight to payment without responding to an
+    outstanding offer is a decline in every practical sense — recorded here
+    so the offer doesn't linger forever and (with a higher session cap) so
+    the SKU is correctly remembered as declined rather than silently forgotten."""
+    state = upsell_state.get_state(db, session_id)
+    if state.pending is None:
+        return
+    _audit.log_event(
+        db,
+        session_id=session_id,
+        user_id=user_id,
+        event_type="upsell_declined",
+        actor="system",
+        tool_name=state.pending.sku,
+        tool_args={"sku": state.pending.sku},
+        reason="Implicit decline — the user proceeded to payment without responding to the offer.",
+    )
+
+
+def decline_upsell(db: Session, user_id: str, session_id: str) -> dict:
+    """Explicitly records that the user turned down the outstanding upsell
+    offer, so the recommender never re-proposes that SKU this session
+    (UpsellPolicyRule enforces this — see policy/rules.py). Not policy-gated:
+    declining something is never itself a risk, so it isn't evaluated by
+    the engine — it just always executes.
+    """
+    state = upsell_state.get_state(db, session_id)
+    if state.pending is None:
+        return {"error": "There is no pending upsell offer to decline."}
+    _audit.log_event(
+        db,
+        session_id=session_id,
+        user_id=user_id,
+        event_type="upsell_declined",
+        actor="user",
+        tool_name=state.pending.sku,
+        tool_args={"sku": state.pending.sku},
+        reason="The user declined this upsell offer.",
+    )
+    return {"declined_sku": state.pending.sku}
+
+
 def initiate_payment(db: Session, user_id: str, session_id: str) -> dict:
     """Creates (or reuses) the order + Razorpay order for the current cart.
 
@@ -124,6 +168,7 @@ def initiate_payment(db: Session, user_id: str, session_id: str) -> dict:
     Only ever reached after the policy engine has said REQUIRE_CONFIRMATION
     and the user has explicitly confirmed — never a straight ALLOW.
     """
+    _auto_decline_stale_upsell(db, user_id, session_id)
     cart = cart_repo.get_or_create_active_cart(db, user_id)
     if not cart.items:
         return {"error": "Cart is empty — nothing to pay for."}
@@ -231,6 +276,7 @@ TOOL_FUNCTIONS = {
     "view_cart": lambda db, user_id, session_id, **kw: view_cart(db, user_id),
     "remove_from_cart": lambda db, user_id, session_id, **kw: remove_from_cart(db, user_id, **kw),
     "initiate_payment": lambda db, user_id, session_id, **kw: initiate_payment(db, user_id, session_id),
+    "decline_upsell": lambda db, user_id, session_id, **kw: decline_upsell(db, user_id, session_id),
 }
 
 TOOL_SCHEMAS = [
@@ -304,6 +350,16 @@ TOOL_SCHEMAS = [
                 "properties": {"sku": {"type": "string", "description": "The SKU to remove from the cart."}},
                 "required": ["sku"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "decline_upsell",
+            "description": "Record that the user does not want the currently-offered upsell add-on "
+            "(a 'suggested_upsell' field on a prior tool result). Call this once the user has said no "
+            "or clearly moved on, so it is not suggested again this session. Takes no arguments.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {

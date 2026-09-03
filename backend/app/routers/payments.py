@@ -8,16 +8,21 @@ Signature verification is what decides success here — never the frontend's
 say-so. See app/payments/gateway.py.
 """
 
+import hashlib
+import hmac
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.audit.service import AuditService
+from app.core.config import settings
 from app.database import get_db
 from app.orders import repository as order_repo
 from app.orders import service as order_service
 from app.orders.state_machine import OrderStatus
 from app.payments.gateway import gateway
-from app.schemas.payments import PaymentFailedRequest, PaymentResultOut, VerifyPaymentRequest
+from app.schemas.payments import PaymentFailedRequest, PaymentResultOut, TestCompletePaymentRequest, VerifyPaymentRequest
 
 router = APIRouter(tags=["payments"])
 _audit = AuditService()
@@ -127,6 +132,39 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request, db: Session 
         amount_paise=order.amount_paise,
         message="Payment verified and captured.",
     )
+
+
+@router.post("/api/payments/test-complete", response_model=PaymentResultOut)
+def test_complete_payment(
+    payload: TestCompletePaymentRequest, request: Request, db: Session = Depends(get_db)
+) -> PaymentResultOut:
+    """Stands in for a completed Razorpay Checkout round-trip in headless
+    contexts — same dev-only gating as X-Chaos-Fault (app/testing/chaos.py),
+    same reasoning: a genuinely external buyer (buyer_agent/) has no browser
+    to drive Checkout's OTP flow and, correctly, no access to this
+    merchant's razorpay_key_secret to sign a callback itself. This endpoint
+    signs a synthetic payment_id server-side — the secret never leaves this
+    process — and then calls the exact same verify_payment() below with it,
+    so the real signature-check code path still runs unmodified. Only the
+    *signing* is a shortcut; the *verification* is not.
+    """
+    if settings.app_env != "development":
+        raise HTTPException(status_code=404, detail="Not found.")
+
+    order = order_repo.find_by_razorpay_order_id(db, payload.razorpay_order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="No order found for this razorpay_order_id.")
+
+    payment_id = f"pay_test_{uuid.uuid4().hex[:12]}"
+    signature = hmac.new(
+        settings.razorpay_key_secret.encode(),
+        f"{payload.razorpay_order_id}|{payment_id}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    verify_payload = VerifyPaymentRequest(
+        razorpay_order_id=payload.razorpay_order_id, razorpay_payment_id=payment_id, razorpay_signature=signature
+    )
+    return verify_payment(verify_payload, request, db)
 
 
 @router.post("/api/payments/failed", response_model=PaymentResultOut)
