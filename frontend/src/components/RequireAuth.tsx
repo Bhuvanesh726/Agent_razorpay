@@ -5,15 +5,13 @@ import { useRouter } from "next/navigation";
 import { AuthUser, useAuth } from "@/lib/auth";
 
 interface Props {
-  /** Which principal types may see this page. Omit to allow any onboarded human. */
+  /** Which principal types may see this page. Omit to allow any signed-in human. */
   allow?: Array<"buyer" | "merchant">;
   children: React.ReactNode;
 }
 
 function landingPathFor(type: AuthUser["type"]): string {
-  if (type === "merchant") return "/merchant";
-  if (type === "buyer") return "/dashboard";
-  return "/onboarding";
+  return type === "merchant" ? "/merchant" : "/dashboard";
 }
 
 export default function RequireAuth({ allow, children }: Props) {
@@ -24,13 +22,6 @@ export default function RequireAuth({ allow, children }: Props) {
     if (loading) return;
     if (!user) {
       router.replace("/login");
-      return;
-    }
-    if (user.type === "pending") {
-      // A hard gate, not a suggestion — every ordinary page requires an
-      // onboarded role, so a pending user always lands here first,
-      // regardless of what this particular page's `allow` says.
-      router.replace("/onboarding");
       return;
     }
     if (allow && !allow.includes(user.type as "buyer" | "merchant")) {
@@ -50,7 +41,7 @@ export default function RequireAuth({ allow, children }: Props) {
       </div>
     );
   }
-  if (!user || user.type === "pending") return null;
+  if (!user) return null;
   if (allow && !allow.includes(user.type as "buyer" | "merchant")) return null;
   return <>{children}</>;
 }

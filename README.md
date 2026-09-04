@@ -181,7 +181,7 @@ graph TD
     edge["Edge / auth<br/>default-deny · JWT or agent key"]
     app["Routers → Services → Repositories"]
     agent["Agent layer<br/>model proposes"]
-    policy["POLICY ENGINE<br/>13 deterministic rules<br/>allow · ask · refuse"]
+    policy["POLICY ENGINE<br/>14 deterministic rules<br/>allow · ask · refuse"]
     domain["Cart · Orders · Payments<br/>Campaigns · Demand"]
     db[("Database")]
     audit["Audit log — append-only"]
@@ -268,8 +268,8 @@ Fill these in only for the features that call outside services:
 
 For Google sign-in, register **both** of these as authorized redirect URIs on your OAuth client:
 `http://127.0.0.1:8842/api/auth/google/callback` and
-`http://localhost:8842/api/auth/google/callback`. Pick buyer or merchant at `/onboarding` on first
-login.
+`http://localhost:8842/api/auth/google/callback`. You'll sign in as a buyer; use the dev role
+switch in the header to see the merchant side of the same account.
 
 **Database.** SQLite by default, created automatically — no migration step. Schema changes apply on
 startup. Postgres is supported: `docker compose --profile postgres up`.

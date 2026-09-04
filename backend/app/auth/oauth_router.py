@@ -91,11 +91,14 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         if user is None:
             user = db.query(User).filter(User.email == email).first()
         if user is None:
-            # No role assigned here — Layer 4.8 replaced the MERCHANT_EMAILS
-            # allowlist entirely with an explicit /onboarding choice. role
-            # stays None (PrincipalType "pending") until the user picks one;
-            # see app/auth/onboarding_router.py.
-            user = User(id=f"google_{sub}", email=email, name=name, google_sub=sub, role=None)
+            # Everyone starts as a BUYER. Layer 4.8 used to park a new user
+            # at /onboarding to pick a role first, but in this project one
+            # person is legitimately both sides — they need to shop *and* see
+            # the merchant view of their own store — so a one-time,
+            # irreversible-feeling choice was the wrong shape. The role switch
+            # (app/auth/role_router.py) is the supported way to move between
+            # them, and it can be used as often as you like.
+            user = User(id=f"google_{sub}", email=email, name=name, google_sub=sub, role="BUYER")
             db.add(user)
         else:
             user.google_sub = sub
@@ -130,7 +133,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/api/auth/me")
-@requires(AuthRequirement.BUYER, AuthRequirement.MERCHANT, AuthRequirement.AGENT, AuthRequirement.PENDING)
+@requires(AuthRequirement.BUYER, AuthRequirement.MERCHANT, AuthRequirement.AGENT)
 def get_me(principal: Principal = Depends(get_principal)) -> dict:
     return {
         "type": principal.type,

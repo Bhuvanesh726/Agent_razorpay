@@ -1,14 +1,15 @@
-"""Role selection — Layer 4.8. Replaces Layer 4.7's MERCHANT_EMAILS
-allowlist entirely: a new Google login gets no role at all
-(app/auth/oauth_router.py no longer assigns one), resolves to PrincipalType
-"pending" (app/auth/principal.py), and is rejected by every ordinary
-BUYER/MERCHANT-gated endpoint until they pick one here. One click, one
-write, done — no wizard. See docs/048-demand-loop.md.
+"""Switching between the buyer and merchant views.
 
-Also hosts the dev-only role switch ("demo both sides without two Google
-accounts") — same dev_env gate as /api/payments/test-complete and
-X-Chaos-Fault, checked after auth so an already-BUYER-or-MERCHANT principal
-is required even in development.
+Every Google login starts as a BUYER (app/auth/oauth_router.py). There is no
+role-selection step: in this project one person is legitimately both sides of
+the marketplace — they shop, and they look at the merchant view of their own
+store — so asking them to commit to one at signup was answering a question
+nobody had. They switch here instead, as often as they want.
+
+Dev-gated, on the same `app_env == "development"` check as
+/api/payments/test-complete and X-Chaos-Fault, and checked after auth so an
+already-BUYER-or-MERCHANT principal is required even in development. A real
+deployment with distinct buyer and merchant accounts would not ship this.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,7 +24,7 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.onboarding import RoleChoice, RoleChoiceResult
 
-router = APIRouter(tags=["onboarding"], route_class=SecureAPIRoute)
+router = APIRouter(tags=["roles"], route_class=SecureAPIRoute)
 
 
 def _set_role_and_reissue(db: Session, user_id: str, role: str) -> RoleChoiceResult:
@@ -34,14 +35,6 @@ def _set_role_and_reissue(db: Session, user_id: str, role: str) -> RoleChoiceRes
     db.commit()
     token = create_access_token(sub=user.id, email=user.email, role=user.role)
     return RoleChoiceResult(role=user.role, token=token)
-
-
-@router.post("/api/onboarding/role", response_model=RoleChoiceResult)
-@requires(AuthRequirement.PENDING)
-def choose_role(
-    payload: RoleChoice, principal: Principal = Depends(get_principal), db: Session = Depends(get_db)
-) -> RoleChoiceResult:
-    return _set_role_and_reissue(db, principal.user_id, payload.role)
 
 
 @router.post("/api/dev/switch-role", response_model=RoleChoiceResult)

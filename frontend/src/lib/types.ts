@@ -236,7 +236,7 @@ export interface ContentGap {
 }
 
 export interface MeResponse {
-  type: "buyer" | "merchant" | "agent" | "pending";
+  type: "buyer" | "merchant" | "agent";
   user_id: string;
   email: string | null;
   role: "BUYER" | "MERCHANT" | null;

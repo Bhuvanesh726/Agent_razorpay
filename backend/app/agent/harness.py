@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.agent.injection_detection import scan_for_injection
 from app.agent.tools import TOOL_FUNCTIONS, TOOL_SCHEMAS
 from app.agent.titles import fallback_title, schedule_title_generation
 from app.audit.service import AuditService
@@ -833,7 +834,10 @@ def _build_proposed_state(db: Session, session, tool_name: str, args: dict) -> P
         cart_line_items = tuple(
             CartLineSnapshot(
                 product=CatalogProductSnapshot(
-                    sku=item.product.sku, price_paise=item.unit_price_paise, stock=item.product.stock
+                    sku=item.product.sku,
+                    price_paise=item.unit_price_paise,
+                    stock=item.product.stock,
+                    injection_flagged=scan_for_injection(item.product.description) is not None,
                 ),
                 quantity=item.quantity,
             )
@@ -857,7 +861,13 @@ def _build_proposed_state(db: Session, session, tool_name: str, args: dict) -> P
         product = product_repo.get_by_sku(db, sku)
         if product is not None:
             product_snapshot = CatalogProductSnapshot(
-                sku=product.sku, price_paise=effective_price_paise(product), stock=product.stock
+                sku=product.sku,
+                price_paise=effective_price_paise(product),
+                stock=product.stock,
+                # Scanned here, at the point the policy engine is given its
+                # facts, so the finding reaches a rule instead of only an
+                # audit event. See InjectionTaintRule.
+                injection_flagged=scan_for_injection(product.description) is not None,
             )
 
     return ProposedCartState(

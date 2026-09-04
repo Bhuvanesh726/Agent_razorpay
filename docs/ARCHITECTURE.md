@@ -102,7 +102,7 @@ graph TD
     end
 
     subgraph L5["⑤ Governance layer — fully deterministic"]
-        policy["Policy engine<br/>13 rules · DENY > ASK > ALLOW"]
+        policy["Policy engine<br/>14 rules · DENY > ASK > ALLOW"]
     end
 
     subgraph L6["⑥ Domain services"]
@@ -361,11 +361,12 @@ Resolution is simple and total: **`DENY` beats `REQUIRE_CONFIRMATION` beats `ALL
 decision, registration order breaks ties, so ordering encodes priority — credential checks before
 cart arithmetic.
 
-The 13 registered rules:
+The 14 registered rules:
 
 | Group | Rules |
 |---|---|
 | Credential | `RevokedCredentialRule`, `AgentScopeRule`, `AgentSpendLimitRule` |
+| Content integrity | `InjectionTaintRule` |
 | Catalog | `UnknownSkuRule`, `OutOfStockRule`, `StockRule` |
 | Limits | `PerItemPriceRule`, `QuantityRule`, `SpendCapRule` |
 | Offers | `UpsellPolicyRule` |
@@ -378,7 +379,7 @@ the right priority, add a test. No other file changes. Nothing needs to know the
 constraint. "Never spend more than ₹500" in a system prompt is advice the model may ignore, misread
 under adversarial input, or silently drop when the prompt is edited. As Python it is a branch — and
 it is re-evaluated at payment time against the cart as it exists then, not as it existed when the
-model was persuaded. This also makes the bound *auditable*: a reviewer can read thirteen small
+model was persuaded. This also makes the bound *auditable*: a reviewer can read fourteen small
 classes and know the complete set of things that can stop a purchase.
 
 `PaymentAuthorizationRule` is worth reading closely: rather than duplicating thresholds, it replays
@@ -499,15 +500,14 @@ graph TB
     subgraph authed["Authenticated — humans"]
         b["BUYER"]
         m["MERCHANT"]
-        p["PENDING (no role yet)"]
     end
     subgraph authzd["Authorized — software"]
         ag["AGENT (X-Agent-Key)"]
     end
 
     anon --> pub["Public: health, catalog, OAuth entry"]
-    p --> onb["Onboarding only"]
     b --> bz["Cart · orders · own agents · chat"]
+    b <-.->|"dev role switch"| m
     m --> mz["Catalog · campaigns · notifications · audit"]
     ag --> az["Catalog · chat · confirm — scoped subset"]
 
@@ -517,13 +517,42 @@ graph TB
 
 Principal types and their reach:
 
-- **PENDING** — signed in with Google, no role chosen. Reaches onboarding and nothing else.
 - **BUYER** — own cart, own orders, own agents, chat.
 - **MERCHANT** — catalog, campaigns, notifications, audit. No access to any buyer's cart.
 - **AGENT** — a scoped subset, bounded by `spend_limit_paise`. Cannot mint credentials, cannot read
   its own configuration, cannot reach buyer-only endpoints.
 
-Model output and merchant-authored catalog text are both treated as untrusted input.
+Model output and merchant-authored catalog text are both treated as untrusted input. Catalog text
+that contains instruction-like content is flagged at snapshot time and refused by
+`InjectionTaintRule` before any money rule is consulted — the scanner's finding is an input to a
+rule, not only an audit event.
+
+### The provenance gap
+
+`InjectionTaintRule` defeats injection arriving through **tainted product text**, which is the
+vector this system exposes. It is not a general defence against prompt injection, and the reason is
+worth stating precisely rather than leaving for someone to discover.
+
+**Nothing in this system verifies that a proposed action traces back to something the user asked
+for.** `ProposedCartState` — the only object the rules see — carries the session, the user, the
+tool, the budget, the cart, a catalog-resolved product, and the acting credential's limits. It
+carries no user intent, no link to the originating message, no provenance. A rule *structurally*
+cannot ask "did the human request this?", because the information is not in the object.
+
+So the bounds are on **quantity, price, stock, scope, budget, credential limits and duplicates** —
+never on origin. Injection arriving by some route other than product text (a compromised tool
+response, a poisoned conversation history, a future integration returning attacker-controlled
+content) would meet exactly the same rules, and they would evaluate it on its numbers alone.
+
+What holds regardless is the payment boundary: `PaymentAuthorizationRule` has no `ALLOW` path, so no
+injected action can move money by itself. The worst available outcome is an item placed in a cart,
+waiting for a human to confirm a payment they already intended — a confused-deputy attack whose last
+line of defence is the buyer noticing an unfamiliar line item. That is human attention, not a rule.
+
+This is the same shape as the supervisor's aggregate-limit gap below: **a bound that is real, but
+does not compose into the guarantee someone might reasonably assume from it.** Closing it needs
+intent to be a first-class input to the policy engine — the proposed action carrying a reference to
+the user turn that motivated it, and a rule that refuses actions which cannot be traced to one.
 
 ---
 

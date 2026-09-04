@@ -1,7 +1,11 @@
-"""Layer 4.8 DoD tests exercised through the real HTTP/routing layer, same
-pattern as tests/test_principals_auth.py: role routing (pending -> onboarding
--> correct dashboard access), buyer/merchant endpoint separation (no
-regression from Layer 4.7), and discount set/cap/display.
+"""Role routing and merchant catalog controls, exercised through the real
+HTTP/routing layer — same pattern as tests/test_principals_auth.py.
+
+There is no onboarding step: every Google login starts as a BUYER
+(app/auth/oauth_router.py) and moves between views with the dev-only role
+switch (app/auth/role_router.py). What these tests hold onto is the part that
+still matters — that the two roles reach different things, and that a role
+change actually re-gates access rather than just relabelling a token.
 """
 
 import pytest
@@ -84,54 +88,42 @@ def _seed_product(session_factory, *, sku="PET-001", price_paise=74000) -> None:
 # --- role routing -----------------------------------------------------
 
 
-def test_new_user_has_no_role_and_resolves_to_pending(client, session_factory):
-    _make_user(session_factory, user_id="new-user", email="new@example.test", role=None)
-    token = _jwt_for("new-user", "new@example.test", None)
+def test_a_user_with_no_role_resolves_to_buyer(client, session_factory):
+    """Rows written before roles were assigned at login. With no onboarding
+    page to send them to, resolving to buyer is the only outcome that leaves
+    them able to do anything — a login that succeeds and then reaches nothing
+    would be worse than a default they can switch away from."""
+    _make_user(session_factory, user_id="legacy-1", email="legacy@example.test", role=None)
+    token = _jwt_for("legacy-1", "legacy@example.test", None)
 
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
-    assert me.json()["type"] == "pending"
-    assert me.json()["role"] is None
+    assert me.json()["type"] == "buyer"
+
+    # And that resolution is real access, not just a label.
+    assert client.get("/api/cart", headers={"Authorization": f"Bearer {token}"}).status_code == 200
 
 
-def test_pending_user_cannot_reach_buyer_or_merchant_endpoints(client, session_factory):
-    _make_user(session_factory, user_id="pending-1", email="pending1@example.test", role=None)
-    token = _jwt_for("pending-1", "pending1@example.test", None)
+def test_a_buyer_reaches_the_buyer_dashboard_immediately(client, session_factory):
+    """No intermediate step between signing in and using the app."""
+    _make_user(session_factory, user_id="buyer-fresh", email="fresh@example.test", role="BUYER")
+    token = _jwt_for("buyer-fresh", "fresh@example.test", "BUYER")
     headers = {"Authorization": f"Bearer {token}"}
 
-    assert client.get("/api/dashboard/summary", headers=headers).status_code == 403
+    assert client.get("/api/dashboard/summary", headers=headers).status_code == 200
     assert client.get("/api/merchant/notifications", headers=headers).status_code == 403
-    assert client.get("/api/cart", headers=headers).status_code == 403
 
 
-def test_onboarding_sets_role_and_reissues_token_that_unlocks_the_right_dashboard(client, session_factory):
-    _make_user(session_factory, user_id="pending-2", email="pending2@example.test", role=None)
-    token = _jwt_for("pending-2", "pending2@example.test", None)
+def test_the_removed_onboarding_endpoint_is_gone(client, session_factory):
+    """It should 404 as a route that no longer exists, not 403 as one that is
+    merely refused — the role-selection step was removed, not locked."""
+    _make_user(session_factory, user_id="buyer-4", email="buyer4@example.test", role="BUYER")
+    token = _jwt_for("buyer-4", "buyer4@example.test", "BUYER")
 
     resp = client.post(
-        "/api/onboarding/role", headers={"Authorization": f"Bearer {token}"}, json={"role": "BUYER"}
+        "/api/onboarding/role", headers={"Authorization": f"Bearer {token}"}, json={"role": "MERCHANT"}
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["role"] == "BUYER"
-    new_token = body["token"]
-
-    # The OLD token is now stale in role terms (DB is truth, JWT role claim
-    # is decorative — see app/auth/principal.py) but still authenticates as
-    # the same user, whose role has changed underneath it.
-    dashboard = client.get("/api/dashboard/summary", headers={"Authorization": f"Bearer {new_token}"})
-    assert dashboard.status_code == 200
-
-    merchant = client.get("/api/merchant/notifications", headers={"Authorization": f"Bearer {new_token}"})
-    assert merchant.status_code == 403
-
-
-def test_onboarding_endpoint_rejects_an_already_onboarded_user(client, session_factory):
-    _make_user(session_factory, user_id="buyer-already", email="already@example.test", role="BUYER")
-    token = _jwt_for("buyer-already", "already@example.test", "BUYER")
-
-    resp = client.post("/api/onboarding/role", headers={"Authorization": f"Bearer {token}"}, json={"role": "MERCHANT"})
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 def test_returning_merchant_reaches_merchant_dashboard_not_buyer_dashboard(client, session_factory):
@@ -163,14 +155,12 @@ def test_buyer_cannot_reach_any_merchant_dashboard_endpoint(client, session_fact
 # --- dev-only role switch ------------------------------------------------
 
 
-def test_dev_role_switch_requires_an_already_onboarded_principal(client, session_factory):
-    _make_user(session_factory, user_id="pending-3", email="pending3@example.test", role=None)
-    token = _jwt_for("pending-3", "pending3@example.test", None)
-    resp = client.post("/api/dev/switch-role", headers={"Authorization": f"Bearer {token}"}, json={"role": "MERCHANT"})
-    assert resp.status_code == 403
+def test_dev_role_switch_requires_authentication(client):
+    resp = client.post("/api/dev/switch-role", json={"role": "MERCHANT"})
+    assert resp.status_code == 401
 
 
-def test_dev_role_switch_works_for_an_onboarded_buyer_in_development(client, session_factory):
+def test_dev_role_switch_moves_a_buyer_to_the_merchant_view(client, session_factory):
     _make_user(session_factory, user_id="buyer-3", email="buyer3@example.test", role="BUYER")
     token = _jwt_for("buyer-3", "buyer3@example.test", "BUYER")
     resp = client.post("/api/dev/switch-role", headers={"Authorization": f"Bearer {token}"}, json={"role": "MERCHANT"})

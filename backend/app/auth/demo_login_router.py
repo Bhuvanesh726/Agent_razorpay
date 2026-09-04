@@ -62,7 +62,7 @@ def demo_login(
     if not demo_login_available():
         # 404, not 403: outside development this endpoint is indistinguishable
         # from one that was never deployed. Same response the other dev-only
-        # endpoints give (app/auth/onboarding_router.py::switch_role,
+        # endpoints give (app/auth/role_router.py::switch_role,
         # app/routers/payments.py::test_complete).
         raise HTTPException(status_code=404, detail="Not found.")
 

@@ -298,14 +298,7 @@ export function runAgent(
   );
 }
 
-// --- Layer 4.8: onboarding + dev role switch ---
-
-export function chooseRole(role: "BUYER" | "MERCHANT"): Promise<RoleChoiceResult> {
-  return request<RoleChoiceResult>("/api/onboarding/role", {
-    method: "POST",
-    body: JSON.stringify({ role }),
-  });
-}
+// --- Dev-only role switch (backend/app/auth/role_router.py) ---
 
 export function devSwitchRole(role: "BUYER" | "MERCHANT"): Promise<RoleChoiceResult> {
   return request<RoleChoiceResult>("/api/dev/switch-role", {

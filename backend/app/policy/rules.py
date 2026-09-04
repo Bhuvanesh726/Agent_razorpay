@@ -36,6 +36,42 @@ class Rule(ABC):
     def evaluate(self, action: ProposedCartState) -> RuleResult | None: ...
 
 
+class InjectionTaintRule(Rule):
+    """A product whose own catalog text tries to issue instructions is never
+    added to a cart, whatever the quantity or price.
+
+    This closes a real hole rather than a theoretical one. The scanner that
+    detects tainted text used to only write an `injection_detected` audit
+    event — a tripwire, not a control — so a modest injection stayed inside
+    every other bound and was allowed: `add_to_cart(INJ-001, 1)` at ₹99 had
+    all thirteen rules abstain and fell through to the default ALLOW. The
+    eval suite missed it because its attack asked for 50 units and died on
+    StockRule, which is to say the test passed because the attacker was
+    greedy.
+
+    Deliberately not a quantity or price question. Tainted text makes the
+    *product* untrustworthy, so one unit is refused exactly as firmly as
+    fifty. Registered ahead of the money rules so this is the reason the
+    audit trail records, rather than whichever budget the request happened
+    to also breach.
+    """
+
+    name = "InjectionTaintRule"
+
+    def evaluate(self, action: ProposedCartState) -> RuleResult | None:
+        if action.tool_name not in PRICE_CHECKED_TOOLS:
+            return None
+        if action.product is None or not action.product.injection_flagged:
+            return None
+        return RuleResult(
+            Decision.DENY,
+            self.name,
+            f"SKU '{action.product.sku}' carries instruction-like text in its own catalog "
+            "listing — an attempt to direct the agent through product data. Refusing to add "
+            "it. This is a content-integrity refusal, not a stock, price or budget limit.",
+        )
+
+
 class UnknownSkuRule(Rule):
     """Models hallucinate SKUs. Never trust one that isn't in the catalog."""
 
@@ -227,7 +263,12 @@ class PaymentAuthorizationRule(Rule):
                 sku=line.product.sku,
                 quantity=line.quantity,
                 product=CatalogProductSnapshot(
-                    sku=line.product.sku, price_paise=line.product.price_paise, stock=line.product.stock
+                    sku=line.product.sku,
+                    price_paise=line.product.price_paise,
+                    stock=line.product.stock,
+                    # Carried through the replay — dropping it here would
+                    # silently exempt payment from InjectionTaintRule.
+                    injection_flagged=line.product.injection_flagged,
                 ),
                 # Propagated from the outer initiate_payment action so an
                 # agent-initiated payment re-validates revocation/scope/limit

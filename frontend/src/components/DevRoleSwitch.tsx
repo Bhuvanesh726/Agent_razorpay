@@ -14,7 +14,7 @@ export default function DevRoleSwitch() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!user || user.type === "pending" || user.type === "agent") return null;
+  if (!user || user.type === "agent") return null;
   const target: "BUYER" | "MERCHANT" = user.type === "buyer" ? "MERCHANT" : "BUYER";
 
   async function switchRole() {

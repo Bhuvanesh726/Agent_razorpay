@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.auth import credentials_router, demo_login_router, oauth_router, onboarding_router
+from app.auth import credentials_router, demo_login_router, oauth_router, role_router
 from app.core.config import settings
 from app.core.errors import CORSSafeServerErrorMiddleware
 from app.core.logging import RequestLoggingMiddleware, configure_logging
@@ -62,7 +62,7 @@ app.include_router(catalog.router)
 app.include_router(campaigns.router)
 app.include_router(oauth_router.router)
 app.include_router(credentials_router.router)
-app.include_router(onboarding_router.router)
+app.include_router(role_router.router)
 app.include_router(demo_login_router.router)
 app.include_router(dashboard.router)
 app.include_router(merchant.router)

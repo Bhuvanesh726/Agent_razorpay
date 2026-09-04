@@ -70,7 +70,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          {user && user.type !== "pending" && (
+          {user && (
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-ink-soft">{user.email}</span>

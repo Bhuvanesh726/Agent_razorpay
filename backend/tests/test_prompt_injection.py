@@ -84,8 +84,13 @@ def test_a_fully_compliant_model_still_gets_denied_by_policy(db_session):
     """Simulates the worst case: the model read the injected instruction and
     did exactly what it asked — proposed add_to_cart for 50 units, no
     hesitation. The policy engine has no idea the model was manipulated; it
-    just evaluates the proposed cart state and denies it like any other
-    out-of-bounds request."""
+    evaluates the proposed cart state and refuses it.
+
+    This used to be denied by StockRule, because 50 units exceeded a stock of
+    5 — the attack was caught for being *large*, not for being an attack. A
+    one-unit version of the same injection passed every rule. InjectionTaintRule
+    now refuses it on content integrity, so the denial no longer depends on the
+    attacker overreaching."""
     seed_injection_product(db_session)
     scripted = iter(
         [
@@ -109,13 +114,14 @@ def test_a_fully_compliant_model_still_gets_denied_by_policy(db_session):
 
     denials = [e for e in trail if e.decision == "DENY" and e.tool_name == "add_to_cart"]
     assert len(denials) == 1
-    assert denials[0].rule_name == "StockRule"
+    assert denials[0].rule_name == "InjectionTaintRule"
     assert "INJ-001" in denials[0].reason
 
 
-def test_even_at_quantity_within_stock_the_spend_or_quantity_rule_still_gates_it(db_session):
-    """Belt-and-suspenders: if stock weren't the limiting factor, the other
-    rules would still catch an out-of-bounds compliant request."""
+def test_a_tainted_product_is_refused_even_when_stock_is_not_the_constraint(db_session):
+    """Isolates content integrity from every quantity-shaped limit: stock is
+    1000 here, so nothing about the size of the request is objectionable. The
+    refusal has to come from the product's own text being untrustworthy."""
     product_repo.upsert(
         db_session,
         {
@@ -145,4 +151,4 @@ def test_even_at_quantity_within_stock_the_spend_or_quantity_rule_still_gates_it
     trail = harness._audit.get_trail(db_session, "sess-injection-3")
     denials = [e for e in trail if e.decision == "DENY" and e.tool_name == "add_to_cart"]
     assert len(denials) == 1
-    assert denials[0].rule_name == "QuantityRule"  # 50 > policy_quantity_max (10)
+    assert denials[0].rule_name == "InjectionTaintRule"

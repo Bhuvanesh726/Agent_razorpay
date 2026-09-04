@@ -32,7 +32,7 @@ function LoginInner() {
 
   // A full navigation, not router.push — AuthProvider only fetches
   // /api/auth/me on mount, so this is what picks up the new token. Same
-  // approach as app/onboarding/page.tsx.
+  // approach as the Google sign-in callback.
   useEffect(() => {
     if (redirectTo) window.location.href = redirectTo;
   }, [redirectTo]);

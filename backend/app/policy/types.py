@@ -19,6 +19,12 @@ class CatalogProductSnapshot:
     sku: str
     price_paise: int
     stock: int
+    # True when this product's own catalog text contains instruction-like
+    # content (app/agent/injection_detection.py). Resolved by the caller and
+    # passed in as a plain bool so rules stay importable with no DB and no
+    # dependency on the scanner. Defaults False so every existing construction
+    # site — and every test — keeps meaning "clean".
+    injection_flagged: bool = False
 
 
 @dataclass(frozen=True)

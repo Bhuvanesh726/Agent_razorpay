@@ -4,6 +4,7 @@ from app.policy.rules import (
     AgentSpendLimitRule,
     ConfirmationThresholdRule,
     DuplicatePaymentRule,
+    InjectionTaintRule,
     OutOfStockRule,
     PaymentAuthorizationRule,
     PerItemPriceRule,
@@ -60,6 +61,11 @@ def default_policy_engine() -> PolicyEngine:
             # refused before its cart math is ever considered.
             RevokedCredentialRule(),
             AgentScopeRule(),
+            # Ahead of every catalog and money rule: a tainted product is
+            # refused on content integrity, and that is the reason the audit
+            # trail should carry — not whichever stock or budget limit the
+            # same request happened to also breach.
+            InjectionTaintRule(),
             unknown_sku,
             out_of_stock,
             stock,
@@ -84,6 +90,13 @@ def default_policy_engine() -> PolicyEngine:
                 item_rules=[
                     RevokedCredentialRule(),
                     AgentScopeRule(),
+                    # Also replayed here: an item can reach the cart without
+                    # passing this rule — added before the rule existed, or
+                    # added by the buyer directly through /api/cart, which is
+                    # their own REST action and never goes through the policy
+                    # engine. Payment is the last point at which a tainted
+                    # line can still be refused.
+                    InjectionTaintRule(),
                     unknown_sku,
                     out_of_stock,
                     stock,
