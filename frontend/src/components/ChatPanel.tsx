@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { History, ScrollText, ShieldAlert, Sparkles } from "lucide-react";
+import { History, Plus, ScrollText, ShieldAlert, Sparkles } from "lucide-react";
 import {
   confirmAgentCredentialAction,
   fetchAgentConversation,
   fetchAuditTrail,
   sendAgentCredentialMessage,
 } from "@/lib/api";
-import { getOrCreateAgentSessionId, openRazorpayCheckout, setActiveAgentSessionId } from "@/lib/checkout";
+import {
+  getOrCreateAgentSessionId,
+  openRazorpayCheckout,
+  setActiveAgentSessionId,
+  startNewAgentSessionId,
+} from "@/lib/checkout";
 import type { AgentSummary, AuditTrail, ChatMessage, PaymentInfo, PendingAction, ProductSuggestion, UpsellOffer } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -63,12 +68,47 @@ export default function ChatPanel({ agents, onCartChanged }: Props) {
   const [auditLoading, setAuditLoading] = useState(false);
   const [payingOrderId, setPayingOrderId] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Which session's transcript is already loaded into `messages`, so the
+  // restore effect below doesn't re-fetch after every turn.
+  const loadedSessionRef = useRef<string | null>(null);
 
   const activeAgent = agents.find((a) => a.id === activeCredentialId) ?? null;
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, pending, productSuggestion]);
+
+  // Restore the conversation this session already has. Without this, closing
+  // and reopening the chat showed an empty panel even though the transcript
+  // was safely on the server — the whole point of persisting it.
+  useEffect(() => {
+    if (!activeCredentialId || !sessionId) return;
+    if (loadedSessionRef.current === sessionId) return;
+    loadedSessionRef.current = sessionId;
+
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      fetchAgentConversation(activeCredentialId, sessionId)
+        .then((detail) => {
+          if (cancelled || detail.messages.length === 0) return;
+          setMessages(
+            detail.messages.map((m) => ({
+              id: `${detail.session_id}-${m.seq}`,
+              role: m.role === "user" ? "user" : "assistant",
+              text: m.content ?? "",
+              timestamp: Date.now(),
+            })),
+          );
+        })
+        // A session id minted but never used has no conversation server-side
+        // and 404s. That is the ordinary first-run case, not an error.
+        .catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCredentialId, sessionId]);
 
   function switchAgent(credentialId: string) {
     setActiveCredentialId(credentialId);
@@ -87,6 +127,10 @@ export default function ChatPanel({ agents, onCartChanged }: Props) {
    *  agent_messages on the server; the session id becomes the active one so
    *  the next message continues that conversation rather than starting a new. */
   async function openConversation(nextSessionId: string) {
+    // A turn already in flight belongs to the conversation it was sent from.
+    // Switching now would land its reply in whichever transcript happened to
+    // be on screen when it returned.
+    if (sending) return;
     if (nextSessionId === sessionId) {
       setShowHistory(false);
       return;
@@ -95,6 +139,7 @@ export default function ChatPanel({ agents, onCartChanged }: Props) {
     setError(null);
     try {
       const detail = await fetchAgentConversation(activeCredentialId, nextSessionId);
+      loadedSessionRef.current = nextSessionId;
       setSessionId(nextSessionId);
       setActiveAgentSessionId(activeCredentialId, nextSessionId);
       setMessages(
@@ -118,6 +163,21 @@ export default function ChatPanel({ agents, onCartChanged }: Props) {
     } finally {
       setLoadingConversation(false);
     }
+  }
+
+  function startNewConversation() {
+    if (sending) return;  // same reasoning as openConversation
+    const fresh = startNewAgentSessionId(activeCredentialId);
+    loadedSessionRef.current = fresh;
+    setSessionId(fresh);
+    setMessages([]);
+    setPending(null);
+    setUpsell(null);
+    setProductSuggestion(null);
+    setError(null);
+    setAuditTrail(null);
+    setShowAudit(false);
+    setShowHistory(false);
   }
 
   function pushMessage(role: ChatMessage["role"], text: string) {
@@ -275,9 +335,20 @@ export default function ChatPanel({ agents, onCartChanged }: Props) {
         )}
         <div className="flex shrink-0 items-center gap-0.5">
           <button
+            onClick={startNewConversation}
+            disabled={sending}
+            title={sending ? "Wait for the current reply to finish" : "Start a new conversation with this agent"}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-ink-soft transition-colors duration-150 hover:bg-black/[0.04] hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus size={13} />
+            New
+          </button>
+          <button
             onClick={() => setShowHistory((v) => !v)}
             aria-expanded={showHistory}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-ink-soft transition-colors duration-150 hover:bg-black/[0.04] hover:text-ink"
+            disabled={sending}
+            title={sending ? "Wait for the current reply to finish" : "Past conversations with this agent"}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-ink-soft transition-colors duration-150 hover:bg-black/[0.04] hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
             <History size={13} />
             History

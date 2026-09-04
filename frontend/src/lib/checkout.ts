@@ -125,6 +125,16 @@ export function getOrCreateAgentSessionId(credentialId: string): string {
   }
 }
 
+// Layer 7: start a fresh conversation with the same agent. Without this the
+// session id above is sticky for the lifetime of the browser profile, so an
+// agent could only ever have one conversation and the history list could
+// never hold a second row.
+export function startNewAgentSessionId(credentialId: string): string {
+  const created = crypto.randomUUID();
+  setActiveAgentSessionId(credentialId, created);
+  return created;
+}
+
 // Layer 7: opening a past conversation makes it the active one for this
 // agent, so a reload resumes where the buyer left off instead of silently
 // dropping them back into the newest session.
