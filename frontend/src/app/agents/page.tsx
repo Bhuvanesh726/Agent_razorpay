@@ -64,7 +64,6 @@ function CreateAgentForm({ onCreated }: { onCreated: (agent: AgentCreateResponse
     new Set(["search_products", "get_product", "present_product", "add_to_cart", "view_cart"])
   );
   const [spendLimitInput, setSpendLimitInput] = useState("500");
-  const [standingInstruction, setStandingInstruction] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,11 +91,9 @@ function CreateAgentForm({ onCreated }: { onCreated: (agent: AgentCreateResponse
         delivery_mode: deliveryMode,
         scopes: Array.from(scopes),
         spend_limit_paise: spendLimitPaise,
-        standing_instruction: standingInstruction.trim() || null,
       });
       onCreated(created);
       setName("");
-      setStandingInstruction("");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -175,16 +172,6 @@ function CreateAgentForm({ onCreated }: { onCreated: (agent: AgentCreateResponse
             <Input type="number" min={1} value={spendLimitInput} onChange={(e) => setSpendLimitInput(e.target.value)} className="w-32" />
           </label>
 
-          <label className="flex flex-col gap-1.5">
-            <Label>Standing instruction (used by &ldquo;Run now&rdquo; for an embedded agent — plain language)</Label>
-            <Textarea
-              value={standingInstruction}
-              onChange={(e) => setStandingInstruction(e.target.value)}
-              placeholder="e.g. Buy a 5kg bag of atta if it's under ₹300 and in stock."
-              rows={2}
-            />
-          </label>
-
           {error && <div className="rounded-lg border border-danger/25 bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>}
 
           <Button type="submit" variant="primary" disabled={submitting} className="self-start">
@@ -217,6 +204,10 @@ function AgentCard({ agent, onChanged }: { agent: AgentSummary; onChanged: () =>
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [busy, setBusy] = useState(false);
   const [runReply, setRunReply] = useState<string | null>(null);
+  const [showRunPrompt, setShowRunPrompt] = useState(false);
+  // Prefilled from the stored standing instruction so an agent that has one
+  // runs exactly as it did before; empty for one created without.
+  const [runInstruction, setRunInstruction] = useState(agent.standing_instruction ?? "");
   const [error, setError] = useState<string | null>(null);
 
   async function toggleExpand() {
@@ -248,13 +239,19 @@ function AgentCard({ agent, onChanged }: { agent: AgentSummary; onChanged: () =>
   }
 
   async function handleRun() {
+    const instruction = runInstruction.trim();
+    if (!instruction) {
+      setError("Tell this agent what to do on this run.");
+      return;
+    }
     setBusy(true);
     setError(null);
     setRunReply(null);
     try {
-      const res = await runAgent(agent.id);
+      const res = await runAgent(agent.id, instruction);
       setRunReply(res.reply);
       setDetail(null); // stale — force a re-fetch next expand for updated spend/actions
+      setShowRunPrompt(false);
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -298,8 +295,14 @@ function AgentCard({ agent, onChanged }: { agent: AgentSummary; onChanged: () =>
         </div>
 
         <div className="flex shrink-0 gap-2">
-          {agent.status === "ACTIVE" && agent.delivery_mode === "EMBEDDED" && agent.standing_instruction && (
-            <Button variant="primary" size="sm" onClick={handleRun} disabled={busy}>
+          {agent.status === "ACTIVE" && agent.delivery_mode === "EMBEDDED" && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setShowRunPrompt((v) => !v)}
+              disabled={busy}
+              aria-expanded={showRunPrompt}
+            >
               <Play size={13} />
               {busy ? "Running…" : "Run now"}
             </Button>
@@ -315,6 +318,32 @@ function AgentCard({ agent, onChanged }: { agent: AgentSummary; onChanged: () =>
           </Button>
         </div>
       </div>
+
+      {showRunPrompt && agent.status === "ACTIVE" && agent.delivery_mode === "EMBEDDED" && (
+        <div className="mt-3 flex flex-col gap-2 rounded-lg border border-line bg-black/[0.015] p-3">
+          <Label>What should {agent.name} do on this run?</Label>
+          <Textarea
+            value={runInstruction}
+            onChange={(e) => setRunInstruction(e.target.value)}
+            placeholder="e.g. Buy a 5kg bag of atta if it's under ₹300 and in stock."
+            rows={2}
+            disabled={busy}
+          />
+          <p className="text-xs text-ink-faint">
+            Runs as this agent, under its own scopes and its ₹{(agent.spend_limit_paise / 100).toFixed(2)} spend
+            limit — the same policy checks as any other call it makes.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="primary" size="sm" onClick={handleRun} disabled={busy}>
+              <Play size={13} />
+              {busy ? "Running…" : "Run"}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowRunPrompt(false)} disabled={busy}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {runReply && <div className="mt-3 rounded-lg border border-line bg-black/[0.02] p-3 text-xs text-ink-soft">{runReply}</div>}
       {error && <div className="mt-3 rounded-lg border border-danger/25 bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>}

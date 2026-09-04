@@ -287,8 +287,15 @@ export function revokeAgent(credentialId: string): Promise<AgentSummary> {
   return request<AgentSummary>(`/api/agents/${credentialId}/revoke`, { method: "POST" });
 }
 
-export function runAgent(credentialId: string): Promise<{ reply: string; status: string; cart: Cart }> {
-  return request(`/api/agents/${credentialId}/run`, { method: "POST" }, AGENT_REQUEST_TIMEOUT_MS);
+export function runAgent(
+  credentialId: string,
+  instruction?: string,
+): Promise<{ reply: string; status: string; cart: Cart }> {
+  return request(
+    `/api/agents/${credentialId}/run`,
+    { method: "POST", body: JSON.stringify({ instruction: instruction ?? null }) },
+    AGENT_REQUEST_TIMEOUT_MS,
+  );
 }
 
 // --- Layer 4.8: onboarding + dev role switch ---

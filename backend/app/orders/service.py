@@ -41,7 +41,7 @@ def create_or_get_order(db: Session, *, user_id: str, session_id: str, cart: Car
 
     line_items = _line_items(cart)
     amount_paise = sum(qty * price for _, qty, price in line_items)
-    key = compute_idempotency_key(user_id, line_items, amount_paise)
+    key = compute_idempotency_key(user_id, line_items, amount_paise, cart.id)
 
     order, created = order_repo.get_or_create(
         db,

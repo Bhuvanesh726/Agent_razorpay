@@ -47,6 +47,14 @@ class AgentDetailOut(AgentSummaryOut):
     recent_actions: list[AgentActionOut]
 
 
+class AgentRunRequest(BaseModel):
+    """Optional, and optional on purpose: the body was added after this
+    endpoint shipped, so a caller that sends none still runs the credential's
+    stored standing_instruction exactly as before."""
+
+    instruction: str | None = None
+
+
 class AgentRunResult(BaseModel):
     reply: str
     status: str

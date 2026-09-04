@@ -135,13 +135,36 @@ function MerchantDashboardInner() {
         <SkeletonCards count={5} className="sm:grid-cols-5" />
       ) : headline ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          <MetricCard label="Queries received" value={String(headline.queries_received)} />
-          <MetricCard label="Match rate" value={`${(headline.match_rate * 100).toFixed(0)}%`} />
-          <MetricCard label="Unmet demand" value={String(headline.unmet_demand_count)} />
-          <MetricCard label="Upsell revenue" value={paise(headline.upsell_revenue_paise)} />
+          <MetricCard
+            label="Queries received"
+            value={String(headline.queries_received)}
+            meta="buyer chat turns with product intent"
+          />
+          <MetricCard
+            label="Match rate"
+            value={`${(headline.match_rate * 100).toFixed(0)}%`}
+            meta="of those, matched to a real SKU"
+          />
+          <MetricCard
+            label="Unmet demand"
+            value={String(headline.unmet_demand_count)}
+            meta="asked for, nothing matched"
+          />
+          {/* Counts upsells the buyer accepted into their cart, which is when
+              upsell_accepted is logged (app/agent/harness.py) — not payments
+              captured. Calling this "revenue" overstated it. */}
+          <MetricCard
+            label="Upsell value accepted"
+            value={paise(headline.upsell_revenue_paise)}
+            meta="added to carts, not captured payments"
+          />
+          {/* simulate_offer_outcome() draws conversions against a configured
+              probability — see app/campaigns/simulation.py. Segments and
+              policy decisions behind it are real; this figure is not. */}
           <MetricCard
             label="Campaign net margin"
             value={paise(headline.campaign_net_margin_impact_paise)}
+            meta="simulated outcome"
             tone={headline.campaign_net_margin_impact_paise < 0 ? "danger" : "success"}
           />
         </div>

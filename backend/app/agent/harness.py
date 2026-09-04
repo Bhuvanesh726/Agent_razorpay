@@ -881,7 +881,7 @@ def _existing_order_status(user_id: str, cart, db: Session) -> str | None:
         return None
     line_items = [(item.product.sku, item.quantity, item.unit_price_paise) for item in cart.items]
     amount_paise = sum(qty * price for _, qty, price in line_items)
-    key = compute_idempotency_key(user_id, line_items, amount_paise)
+    key = compute_idempotency_key(user_id, line_items, amount_paise, cart.id)
     existing = order_repo.find_by_idempotency_key(db, key)
     return existing.status if existing is not None else None
 

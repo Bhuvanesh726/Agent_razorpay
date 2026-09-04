@@ -126,9 +126,16 @@ def append_message(
 
     # Denormalised counters, maintained here so the history list never has to
     # aggregate messages per conversation to render a row.
+    #
+    # Counts only what the transcript will actually show — the same filter
+    # app/auth/credentials_router.py::get_agent_conversation applies. Counting
+    # every row instead made the history list advertise "8 messages" for a
+    # conversation that opens with two, because system prompts, tool results
+    # and tool-call-only assistant turns are all rows a buyer never sees.
     session = get_session(db, session_id)
     if session is not None:
-        session.message_count = (session.message_count or 0) + 1
+        if role in ("user", "assistant") and content:
+            session.message_count = (session.message_count or 0) + 1
         session.last_active_at = datetime.now(timezone.utc)
 
     db.flush()

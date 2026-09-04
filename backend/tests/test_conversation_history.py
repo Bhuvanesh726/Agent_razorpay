@@ -203,6 +203,37 @@ def test_transcript_reads_from_agent_messages(client, world, session_factory):
     assert body["messages"][0]["content"] == "add atta"
 
 
+def test_message_count_matches_what_the_transcript_shows(client, world, session_factory):
+    """The list advertised "8 messages" for a conversation that opened with
+    two: system prompts, tool results and tool-call-only assistant turns are
+    rows a buyer never sees. The count must mean the same thing the
+    transcript does."""
+    db = session_factory()
+    try:
+        agent_session_repo.append_message(db, "s-alice-1", "system", content="you are a shopping agent")
+        agent_session_repo.append_message(db, "s-alice-1", "user", content="add atta")
+        agent_session_repo.append_message(db, "s-alice-1", "assistant", content=None, tool_calls=[{"id": "c1"}])
+        agent_session_repo.append_message(db, "s-alice-1", "tool", content='{"ok": true}', tool_name="add_to_cart")
+        agent_session_repo.append_message(db, "s-alice-1", "assistant", content="Added it.")
+        db.commit()
+        counted = agent_session_repo.get_session(db, "s-alice-1").message_count
+    finally:
+        db.close()
+
+    body = client.get(f"/api/agents/{world['alice']}/conversations/s-alice-1", headers=_auth()).json()
+    listed = next(
+        c["message_count"]
+        for c in client.get(f"/api/agents/{world['alice']}/conversations", headers=_auth()).json()
+        if c["session_id"] == "s-alice-1"
+    )
+
+    assert len(body["messages"]) == 2, "only user/assistant turns with content are shown"
+    # The fixture seeds this conversation with message_count=2 before these
+    # five appends, so compare the delta rather than an absolute.
+    assert counted - 2 == 2
+    assert listed == counted
+
+
 def test_appending_a_message_maintains_the_counters(session_factory):
     db = session_factory()
     try:

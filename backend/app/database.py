@@ -78,8 +78,13 @@ def _backfill_conversation_counters(conn) -> None:
     conversations a buyer wants to resume (the ones that already existed) are
     the ones that would be invisible.
 
-    Idempotent: only touches rows still sitting at the default, and derives
-    both values from agent_messages, which is the source of truth either way.
+    Recomputed unconditionally rather than only for rows sitting at the
+    default. message_count is a denormalised copy of something agent_messages
+    already knows, so deriving it fresh on every startup is both idempotent
+    (the live counter in agent_session_repo uses the identical filter) and
+    self-healing — a count that drifted, or one written under an older and
+    wrong definition of "message", corrects itself instead of staying wrong
+    forever.
     """
     conn.execute(
         text(
@@ -88,17 +93,14 @@ def _backfill_conversation_counters(conn) -> None:
                SET message_count = (
                      SELECT COUNT(*) FROM agent_messages m
                       WHERE m.session_id = agent_sessions.session_id
+                        AND m.role IN ('user', 'assistant')
+                        AND m.content IS NOT NULL AND m.content != ''
                    ),
                    last_active_at = COALESCE(
                      last_active_at,
                      (SELECT MAX(m.created_at) FROM agent_messages m
                        WHERE m.session_id = agent_sessions.session_id),
                      updated_at
-                   )
-             WHERE COALESCE(message_count, 0) = 0
-               AND EXISTS (
-                     SELECT 1 FROM agent_messages m
-                      WHERE m.session_id = agent_sessions.session_id
                    )
             """
         )

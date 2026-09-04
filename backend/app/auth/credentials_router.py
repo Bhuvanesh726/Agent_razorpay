@@ -32,6 +32,7 @@ from app.schemas.conversations import (
 from app.schemas.agent import AgentChatRequest, ChatResponse, ConfirmRequest, PaymentInfoOut, QuickBuyRequest
 from app.schemas.agents import (
     AgentActionOut,
+    AgentRunRequest,
     AgentCreateRequest,
     AgentCreateResponse,
     AgentDetailOut,
@@ -155,7 +156,10 @@ def revoke_agent(
 @router.post("/api/agents/{credential_id}/run", response_model=AgentRunResult)
 @requires(AuthRequirement.BUYER)
 def run_agent(
-    credential_id: str, principal: Principal = Depends(get_principal), db: Session = Depends(get_db)
+    credential_id: str,
+    payload: AgentRunRequest | None = None,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
 ) -> AgentRunResult:
     """EMBEDDED mode's "grant, run, observe, revoke" loop — the buyer never
     presents a key here at all (they're already authenticated as the
@@ -171,8 +175,18 @@ def run_agent(
     cred = _get_owned_credential(db, credential_id, principal)
     if cred.status == "REVOKED":
         raise HTTPException(status_code=403, detail="This credential has been revoked.")
-    if not cred.standing_instruction:
-        raise HTTPException(status_code=422, detail="This agent has no standing instruction to run.")
+    # A per-run instruction beats the stored one. "What should it do this
+    # time?" is a better question than one answer fixed at creation, and it
+    # means an agent created without a standing instruction is still runnable.
+    # Falls back to the stored value so a caller sending no body — including
+    # every caller that predates this field — behaves exactly as before.
+    instruction = (payload.instruction or "").strip() if payload else ""
+    instruction = instruction or (cred.standing_instruction or "").strip()
+    if not instruction:
+        raise HTTPException(
+            status_code=422,
+            detail="Tell this agent what to do — it has no standing instruction to fall back on.",
+        )
 
     # _resolve_from_agent_key stamps this for a real X-Agent-Key HTTP call —
     # this path never calls it (there's no key to present), so it has to be
@@ -185,7 +199,7 @@ def run_agent(
     try:
         session_id = f"agent-run-{uuid.uuid4().hex[:8]}"
         result = harness.handle_chat(
-            db, session_id, cred.owner_user_id, cred.standing_instruction, cred.spend_limit_paise, None
+            db, session_id, cred.owner_user_id, instruction, cred.spend_limit_paise, None
         )
     finally:
         reset_current_principal(token)
