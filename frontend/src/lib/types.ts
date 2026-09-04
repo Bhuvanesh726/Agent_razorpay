@@ -248,6 +248,25 @@ export interface RoleChoiceResult {
   token: string;
 }
 
+export interface DemoPrincipalOption {
+  role: "BUYER" | "MERCHANT";
+  email: string;
+  name: string;
+  description: string;
+}
+
+export interface DemoLoginOptions {
+  available: boolean;
+  principals: DemoPrincipalOption[];
+}
+
+export interface DemoLoginResult {
+  token: string;
+  user_id: string;
+  email: string;
+  role: string;
+}
+
 export interface AgentCreateRequest {
   name: string;
   delivery_mode: "EMBEDDED" | "EXTERNAL";

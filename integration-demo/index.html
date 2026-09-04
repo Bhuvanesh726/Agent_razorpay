@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kirana Mart &mdash; Agentic Commerce Integration Demo</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">KM</span>
+    <div>
+      <h1>Kirana Mart</h1>
+      <p class="tagline">A fictional third-party merchant integrating the agentic-commerce API</p>
+    </div>
+  </div>
+  <div class="noai" title="This page ships no model SDK, no API key for any LLM provider, and no inference code.">
+    <strong>0 AI dependencies in this app</strong>
+    <span>vanilla JS only &mdash; the agent lives behind the API key</span>
+  </div>
+</header>
+
+<section class="keybar" id="keybar">
+  <div class="keybar-row">
+    <label for="keyInput">Agent API key</label>
+    <input id="keyInput" type="password" spellcheck="false" autocomplete="off"
+           placeholder="agentkey_... (issued by the merchant platform, shown once at creation)">
+    <button id="btnReveal" class="ghost" type="button" title="Show/hide key">show</button>
+    <button id="btnConnect" class="primary" type="button">Connect</button>
+    <button id="btnForget" class="danger" type="button">Delete key</button>
+  </div>
+  <div class="keybar-status" id="keyStatus">
+    <span class="dot dot-idle"></span>
+    <span id="keyStatusText">No key. Paste an EXTERNAL agent key to enable the assistant.</span>
+  </div>
+  <dl class="identity" id="identity" hidden></dl>
+  <p class="identity-note" id="identityNote" hidden></p>
+</section>
+
+<main class="grid">
+
+  <section class="panel catalog">
+    <div class="panel-head">
+      <h2>Catalog</h2>
+      <span class="badge public">public endpoint &mdash; no auth</span>
+    </div>
+    <form id="searchForm" class="searchrow" autocomplete="off">
+      <input id="searchInput" type="search" placeholder="Search the catalog (e.g. atta, coffee, soap)">
+      <button class="primary" type="submit">Search</button>
+      <button id="btnReset" class="ghost" type="button">Reset</button>
+    </form>
+    <p class="hint" id="catalogHint">Loading products&hellip;</p>
+    <div class="products" id="products"></div>
+  </section>
+
+  <section class="panel chat">
+    <div class="panel-head">
+      <h2>Shopping assistant</h2>
+      <span class="badge agent">POST /api/agent/chat &mdash; X-Agent-Key</span>
+    </div>
+    <div class="log" id="chatLog">
+      <div class="msg system">
+        <p>Every reply below is produced by the platform&rsquo;s agent, reached over HTTP with the
+        pasted key. This page contains no prompt, no model, no inference.</p>
+      </div>
+    </div>
+    <div id="pendingBox" class="pending" hidden>
+      <div class="pending-head">Confirmation required by the platform&rsquo;s policy engine</div>
+      <dl id="pendingDetail"></dl>
+      <div class="pending-actions">
+        <button id="btnApprove" class="primary" type="button">Confirm</button>
+        <button id="btnDecline" class="danger" type="button">Decline</button>
+      </div>
+    </div>
+    <form id="chatForm" class="chatrow" autocomplete="off">
+      <input id="chatInput" type="text" placeholder="Add 1 Tata Salt to my cart">
+      <button id="btnSend" class="primary" type="submit">Send</button>
+    </form>
+    <div class="chatmeta">
+      <label>Budget cap
+        <input id="budgetInput" type="number" min="0" step="100" value="1000"> &#8377;
+      </label>
+      <span class="sid">session <code id="sessionId"></code></span>
+      <button id="btnNewSession" class="ghost" type="button">New session</button>
+    </div>
+  </section>
+
+  <section class="panel cart">
+    <div class="panel-head">
+      <h2>Cart</h2>
+      <span class="badge agent">from ChatResponse.cart</span>
+    </div>
+    <p class="hint">
+      <code>/api/cart</code> is buyer-only by design and rejects agent keys with 403 &mdash; so this
+      panel is rendered purely from the <code>cart</code> object the chat response returns.
+    </p>
+    <div id="cartBox" class="cartbox"><p class="empty">No cart yet. Ask the assistant to add something.</p></div>
+    <button id="btnRefreshCart" class="ghost wide" type="button">Ask the agent to show my cart</button>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <span id="apiBaseLabel"></span>
+  <span>Endpoints used: <code>GET /api/auth/me</code> &middot; <code>GET /api/products</code> &middot;
+  <code>POST /api/agent/chat</code> &middot; <code>POST /api/agent/confirm</code></span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -15,6 +15,7 @@ from app.core.config import settings  # noqa: E402
 from app.database import Base, SessionLocal, engine  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.repositories import product_repo  # noqa: E402
+from app.testing.demo_login import demo_login_available, ensure_demo_environment  # noqa: E402
 
 DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "products.json"
 
@@ -64,7 +65,17 @@ def main() -> None:
             )
         _seed_demo_user(db)
         db.commit()
-        print(f"Seeded {len(products)} products from {DATA_FILE.name} (upsert on sku), plus the demo user.")
+
+        # Demo buyer + merchant, with enough history to be worth looking at.
+        # Gated exactly like chaos injection: development only, in code. In
+        # any other environment this is skipped and the only way in is Google
+        # (app/auth/oauth_router.py). See app/testing/demo_login.py.
+        demo_seeded = demo_login_available()
+        if demo_seeded:
+            ensure_demo_environment(db)
+
+        suffix = ", plus the demo user and the development-only demo principals." if demo_seeded else ", plus the demo user."
+        print(f"Seeded {len(products)} products from {DATA_FILE.name} (upsert on sku){suffix}")
     finally:
         db.close()
 

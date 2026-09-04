@@ -6,7 +6,9 @@ AWAITING_CONFIRMATION → a Razorpay order exists, waiting on Checkout to comple
 PAID                  → signature verified, terminal
 FAILED                → declined, signature invalid, or Razorpay error; NOT
                          terminal — a fresh attempt against the same order
-                         (same idempotency key) is allowed
+                         (same idempotency key) is allowed, and a verified
+                         signature arriving late can still carry it to PAID
+                         (see FAILED → PAID below)
 CANCELLED             → abandoned before payment; terminal
 """
 
@@ -32,7 +34,26 @@ ALLOWED_TRANSITIONS: dict[OrderStatus, frozenset[OrderStatus]] = {
     OrderStatus.PENDING: frozenset({OrderStatus.AWAITING_CONFIRMATION, OrderStatus.FAILED, OrderStatus.CANCELLED}),
     OrderStatus.AWAITING_CONFIRMATION: frozenset({OrderStatus.PAID, OrderStatus.FAILED, OrderStatus.CANCELLED}),
     # A failed attempt can retry — same order, a fresh Razorpay Checkout pass.
-    OrderStatus.FAILED: frozenset({OrderStatus.AWAITING_CONFIRMATION, OrderStatus.CANCELLED}),
+    #
+    # FAILED → PAID is permitted because Razorpay is the authority on whether
+    # money moved, and our FAILED is only ever a local belief. Razorpay
+    # Checkout can fire its failure callback before its success callback
+    # within a single session (a declined first attempt, then a successful
+    # retry, reported out of order). Refusing the later success left order #23
+    # recorded FAILED while Razorpay held a real captured ₹275 payment — a
+    # reconciliation gap where our own records were simply wrong. See
+    # Failures.md.
+    #
+    # This is NOT a hole in the invariant that matters: mark_paid is only
+    # reachable after gateway.verify_signature() returns True
+    # (app/routers/payments.py and app/agent/harness.py are its only callers),
+    # so reaching PAID still requires an HMAC we can verify against the
+    # merchant secret. What changes is only which *prior local state* is
+    # allowed to block that proof.
+    #
+    # The reverse, PAID → FAILED, remains forbidden: a stale or duplicated
+    # failure callback must never downgrade a payment we verified.
+    OrderStatus.FAILED: frozenset({OrderStatus.AWAITING_CONFIRMATION, OrderStatus.PAID, OrderStatus.CANCELLED}),
     OrderStatus.PAID: frozenset(),  # terminal
     OrderStatus.CANCELLED: frozenset(),  # terminal
 }

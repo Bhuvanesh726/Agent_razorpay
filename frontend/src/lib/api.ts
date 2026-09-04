@@ -11,6 +11,8 @@ import type {
   Cart,
   Category,
   ContentGap,
+  DemoLoginOptions,
+  DemoLoginResult,
   DashboardSummary,
   HeadlineNumbers,
   MeResponse,
@@ -298,6 +300,21 @@ export function chooseRole(role: "BUYER" | "MERCHANT"): Promise<RoleChoiceResult
 
 export function devSwitchRole(role: "BUYER" | "MERCHANT"): Promise<RoleChoiceResult> {
   return request<RoleChoiceResult>("/api/dev/switch-role", {
+    method: "POST",
+    body: JSON.stringify({ role }),
+  });
+}
+
+// --- Development-only demo sign-in (backend/app/testing/demo_login.py) ---
+// `available` is false in every non-development environment, and the POST
+// 404s there regardless of what this client sends.
+
+export function fetchDemoLoginOptions(): Promise<DemoLoginOptions> {
+  return request<DemoLoginOptions>("/api/auth/demo-login");
+}
+
+export function demoLogin(role: "BUYER" | "MERCHANT"): Promise<DemoLoginResult> {
+  return request<DemoLoginResult>("/api/auth/demo-login", {
     method: "POST",
     body: JSON.stringify({ role }),
   });

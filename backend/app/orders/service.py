@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.logging import logger
 from app.models.cart import Cart
 from app.models.order import Order, Payment
 from app.orders import repository as order_repo
@@ -87,9 +88,37 @@ def ensure_razorpay_order(db: Session, order: Order) -> Order:
 def mark_paid(
     db: Session, order: Order, *, razorpay_payment_id: str, method: str | None, raw_response: dict | None
 ) -> Payment:
-    require_transition(OrderStatus(order.status), OrderStatus.PAID)
+    previous = OrderStatus(order.status)
+    require_transition(previous, OrderStatus.PAID)
     order.status = OrderStatus.PAID.value
     order_repo.save(db, order)
+
+    if previous == OrderStatus.FAILED:
+        # A silent FAILED → PAID would be exactly the kind of unexplained
+        # state change this project exists to make impossible, so the
+        # recovery is written to the audit trail in its own right rather
+        # than being visible only as a status that quietly changed.
+        # Local import for the same reason app/testing/chaos.py uses one:
+        # audit imports widely, orders.service is imported widely.
+        from app.audit.service import AuditService
+
+        logger.warning(
+            "order recovered from FAILED after a verified signature",
+            extra={"order_id": order.id, "razorpay_payment_id": razorpay_payment_id},
+        )
+        AuditService().log_event(
+            db,
+            session_id=order.session_id,
+            user_id=order.user_id,
+            event_type="payment_recovered_after_failure",
+            actor="system",
+            decision="ALLOW",
+            reason=(
+                f"Order was recorded FAILED locally, but Razorpay confirmed payment "
+                f"{razorpay_payment_id} with a signature that verified. Razorpay is the "
+                "authority on whether money moved, so the order is now PAID."
+            ),
+        )
 
     payment = Payment(
         order_id=order.id,
@@ -115,7 +144,19 @@ def mark_failed(
     raw_response: dict | None = None,
 ) -> Payment:
     current = OrderStatus(order.status)
-    if current != OrderStatus.PAID:  # never downgrade a paid order on a stale/duplicate failure report
+    if current == OrderStatus.PAID:
+        # Never downgrade a paid order on a stale/duplicate failure report.
+        pass
+    elif current == OrderStatus.FAILED:
+        # Already failed. Razorpay Checkout can report the same failure more
+        # than once (a retried callback, a reopened modal), and FAILED →
+        # FAILED is not a legal transition — calling require_transition here
+        # raised InvalidTransitionError, which surfaced to the browser as an
+        # unexplained 500 rather than as "your payment failed". The attempt is
+        # still worth recording, so fall through to the Payment row below and
+        # simply leave the status alone.
+        pass
+    else:
         require_transition(current, OrderStatus.FAILED)
         order.status = OrderStatus.FAILED.value
         order_repo.save(db, order)

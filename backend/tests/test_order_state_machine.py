@@ -12,6 +12,11 @@ VALID_TRANSITIONS = [
     (OrderStatus.AWAITING_CONFIRMATION, OrderStatus.CANCELLED),
     (OrderStatus.FAILED, OrderStatus.AWAITING_CONFIRMATION),  # retry
     (OrderStatus.FAILED, OrderStatus.CANCELLED),
+    # A verified signature arriving after a failure callback. Razorpay is the
+    # authority on whether money moved; our FAILED is only a local belief, and
+    # refusing this left order #23 recorded FAILED against a real captured
+    # payment. See Failures.md and tests/test_failed_order_recovery.py.
+    (OrderStatus.FAILED, OrderStatus.PAID),
 ]
 
 INVALID_TRANSITIONS = [
@@ -23,7 +28,6 @@ INVALID_TRANSITIONS = [
     (OrderStatus.PAID, OrderStatus.PENDING),
     (OrderStatus.CANCELLED, OrderStatus.AWAITING_CONFIRMATION),  # cancelled is terminal
     (OrderStatus.CANCELLED, OrderStatus.PAID),
-    (OrderStatus.FAILED, OrderStatus.PAID),  # must go through AWAITING_CONFIRMATION again
 ]
 
 

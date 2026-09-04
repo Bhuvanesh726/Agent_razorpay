@@ -19,9 +19,17 @@ function paise(p: number): string {
 // app/agent/harness.py::_auto_complete_agent_payment). Verify any order for
 // yourself with backend/scripts/verify_payments.py; see docs/PAYMENT-REALITY.md.
 const SIMULATED_PAYMENT_PREFIXES = ["pay_test_", "pay_auto_", "pay_demo"];
+// Orders written by the development-only demo seed (backend/app/testing/demo_login.py).
+// These differ from the rest: their Razorpay *order* was never created either, so the
+// weaker "the order is real, only the capture is local" wording would overstate them.
+const SEEDED_PAYMENT_PREFIX = "pay_demo_seed";
 
 function isSimulatedCapture(paymentId: string | null): boolean {
   return !!paymentId && SIMULATED_PAYMENT_PREFIXES.some((prefix) => paymentId.startsWith(prefix));
+}
+
+function isSeededCapture(paymentId: string | null): boolean {
+  return !!paymentId && paymentId.startsWith(SEEDED_PAYMENT_PREFIX);
 }
 
 interface Props {
@@ -141,11 +149,20 @@ export default function OrderDetailModal({ orderId, onClose, showBuyer = false }
                 <div className="mt-2 rounded-lg border border-warning/25 bg-warning-soft p-3 text-xs">
                   <div className="flex items-start gap-2">
                     <AlertTriangle size={14} className="mt-0.5 shrink-0 text-warning" />
-                    <p className="text-warning">
-                      <span className="font-medium">Simulated capture (test mode).</span> The Razorpay order is real,
-                      but this payment id was signed locally — Razorpay never processed it, so it will not resolve in
-                      their dashboard or API. See <span className="font-mono">docs/PAYMENT-REALITY.md</span>.
-                    </p>
+                    {isSeededCapture(order.razorpay_payment_id) ? (
+                      <p className="text-warning">
+                        <span className="font-medium">Seeded demo order — no money moved.</span> Nothing here reached
+                        Razorpay: neither this payment nor its order was ever created there. It exists so a reviewer
+                        has history to look at. See <span className="font-mono">docs/PAYMENT-REALITY.md</span>.
+                      </p>
+                    ) : (
+                      <p className="text-warning">
+                        <span className="font-medium">Simulated capture (test mode).</span> The Razorpay order is
+                        real, but this payment id was signed locally — Razorpay never processed it, so it will not
+                        resolve in their dashboard or API. See{" "}
+                        <span className="font-mono">docs/PAYMENT-REALITY.md</span>.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

@@ -2,8 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.auth import credentials_router, oauth_router, onboarding_router
+from app.auth import credentials_router, demo_login_router, oauth_router, onboarding_router
 from app.core.config import settings
+from app.core.errors import CORSSafeServerErrorMiddleware
 from app.core.logging import RequestLoggingMiddleware, configure_logging
 from app.routers import (
     agent,
@@ -31,6 +32,14 @@ app.add_middleware(ChaosHeaderMiddleware)
 # the Google redirect round-trip — unrelated to this backend's own JWTs
 # (app/auth/security.py), which are stateless and never touch this session.
 app.add_middleware(SessionMiddleware, secret_key=settings.jwt_secret_key)
+# MUST stay directly below CORSMiddleware. Starlette treats the last-registered
+# middleware as the outermost, so registering this one first puts it *inside*
+# CORS: it converts an unhandled exception into a response while there is still
+# a CORS layer above to attach Access-Control-Allow-Origin to it. Registered
+# the other way round, 500s reach the browser without CORS headers and every
+# server error is reported as "could not reach the API". See app/core/errors.py
+# and tests/test_error_cors.py.
+app.add_middleware(CORSSafeServerErrorMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url],
@@ -50,6 +59,7 @@ app.include_router(campaigns.router)
 app.include_router(oauth_router.router)
 app.include_router(credentials_router.router)
 app.include_router(onboarding_router.router)
+app.include_router(demo_login_router.router)
 app.include_router(dashboard.router)
 app.include_router(merchant.router)
 app.include_router(checkout.router)
