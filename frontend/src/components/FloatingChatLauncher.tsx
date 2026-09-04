@@ -5,28 +5,30 @@ import Link from "next/link";
 import { MessageCircle, Plus, X } from "lucide-react";
 import ChatPanel from "@/components/ChatPanel";
 import { fetchAgents } from "@/lib/api";
+import type { AgentSummary } from "@/lib/types";
 
 interface Props {
   onCartChanged?: () => void;
 }
 
 // Reachable from every buyer page — routes to agent creation instead of
-// opening chat when the buyer has no agent yet, per Layer 4.8's spec.
-// Reuses the existing Layer 4.7 ChatPanel wholesale rather than rebuilding
-// a second chat surface; see docs/048-demand-loop.md.
+// opening chat when the buyer has no usable agent yet. Interactive chat
+// only runs as an EMBEDDED, ACTIVE credential (see
+// app/auth/credentials_router.py's chat/confirm/quick-buy) — an EXTERNAL
+// or REVOKED one doesn't count as "usable" here even if it exists.
 export default function FloatingChatLauncher({ onCartChanged }: Props) {
-  const [hasAgent, setHasAgent] = useState<boolean | null>(null);
+  const [agents, setAgents] = useState<AgentSummary[] | null>(null);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     fetchAgents()
-      .then((agents) => setHasAgent(agents.length > 0))
-      .catch(() => setHasAgent(false));
+      .then((all) => setAgents(all.filter((a) => a.delivery_mode === "EMBEDDED" && a.status === "ACTIVE")))
+      .catch(() => setAgents([]));
   }, []);
 
-  if (hasAgent === null) return null;
+  if (agents === null) return null;
 
-  if (!hasAgent) {
+  if (agents.length === 0) {
     return (
       <Link
         href="/agents"
@@ -49,7 +51,7 @@ export default function FloatingChatLauncher({ onCartChanged }: Props) {
       </button>
       {open && (
         <div className="fixed bottom-24 right-6 z-40 max-h-[75vh] w-[380px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-line bg-surface shadow-elevated">
-          <ChatPanel onCartChanged={onCartChanged ?? (() => {})} />
+          <ChatPanel agents={agents} onCartChanged={onCartChanged ?? (() => {})} />
         </div>
       )}
     </>

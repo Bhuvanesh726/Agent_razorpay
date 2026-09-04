@@ -34,6 +34,13 @@ def _describe(event: AuditEvent) -> str:
     parts = [f"[{event.actor}] {event.event_type}"]
     if event.tool_name:
         parts.append(f"tool={event.tool_name}")
+    if event.event_type == "confirmation_approved" and event.tool_args:
+        # Distinguishes an explicit chat confirmation from a product card's
+        # one-click confirm-to-buy (app/agent/harness.py::quick_purchase) —
+        # otherwise the two are indistinguishable in this narrative.
+        source = event.tool_args.get("confirmation_source")
+        if source:
+            parts.append(f"via={source}")
     if event.decision:
         parts.append(f"decision={event.decision}")
     if event.rule_name:

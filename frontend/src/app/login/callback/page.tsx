@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { setToken } from "@/lib/auth";
+import { clearSessionId } from "@/lib/checkout";
 
 function LoginCallbackInner() {
   const params = useSearchParams();
@@ -15,6 +16,11 @@ function LoginCallbackInner() {
       return;
     }
     setToken(token);
+    // A fresh login — any chat session id already sitting in localStorage
+    // belongs to whoever last used this browser, not necessarily this
+    // principal. Drop it so the next chat mints a new one instead of
+    // colliding with someone else's AgentSession row.
+    clearSessionId();
     // A full navigation, not a router.push — AuthProvider only fetches
     // /api/auth/me on mount, so this is what actually picks up the new token.
     window.location.href = "/";

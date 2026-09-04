@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { fetchMe } from "@/lib/api";
 import { AuthContext, AuthUser, clearToken, getToken, setToken } from "@/lib/auth";
+import { clearSessionId } from "@/lib/checkout";
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -30,6 +31,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   function logout() {
     clearToken();
+    clearSessionId();
     setUser(null);
     window.location.href = "/";
   }

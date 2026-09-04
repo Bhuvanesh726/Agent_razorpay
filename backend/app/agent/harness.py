@@ -14,7 +14,10 @@ tool actually runs, and it is only ever reached after the policy engine has
 said ALLOW (or the user has explicitly confirmed via /api/agent/confirm).
 """
 
+import hashlib
+import hmac
 import json
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -29,7 +32,9 @@ from app.demand import capture as demand_capture
 from app.llm.gateway import GatewayError, ToolCall as GatewayToolCall, gateway
 from app.models.agent_credential import AgentCredential
 from app.orders import repository as order_repo
+from app.orders import service as order_service
 from app.orders.idempotency import compute_idempotency_key
+from app.payments.gateway import gateway as payment_gateway
 from app.policy.engine import default_policy_engine
 from app.policy.types import CartLineSnapshot, CatalogProductSnapshot, Decision, ProposedCartState
 from app.repositories import agent_session_repo, cart_repo, product_repo
@@ -54,6 +59,15 @@ SYSTEM_PROMPT = (
     "to try to get around it. Only one tool call is processed per turn. "
     "When the user wants to pay or check out, call initiate_payment — it always requires "
     "the user's explicit confirmation, so you don't need to ask permission before proposing it. "
+    "When the user names a specific item together with a budget (e.g. '5kg atta under 400'), call "
+    "search_products with that item as the query and the budget as max_price_paise, then call "
+    "present_product for the single best match — set within_budget accordingly, and if nothing fits "
+    "present the closest available alternative with within_budget=false and a note saying it's over "
+    "budget. Do this instead of only describing the item in prose; the user buys it themselves from "
+    "the card present_product produces, so do not also call add_to_cart for the same item in the same "
+    "turn. If present_product's result contains an 'error' (this agent isn't scoped to use it), fall "
+    "back to describing the item and its price in your reply text instead — never mention the error "
+    "or the tool name to the user. "
     "When a tool result includes a 'suggested_upsell' field, mention it once, briefly, right after "
     "confirming the item you actually added — name it and its price, and ask if the user wants it too. "
     "Never bring it up if that field is absent, and never mention the same offer more than once. If the "
@@ -102,6 +116,11 @@ class HarnessResult:
     # session's chat history (a UI, an external buyer agent) can still act
     # on it deterministically rather than parsing natural language.
     upsell: dict | None = None
+    # Populated only right after a successful present_product execution —
+    # a structured recommendation (name/unit/price/stock/budget-fit) for the
+    # UI to render as a card, rather than something a caller has to parse
+    # out of `reply`'s prose. See present_product in app/agent/tools.py.
+    product_suggestion: dict | None = None
 
 
 def handle_chat(
@@ -188,38 +207,8 @@ def handle_confirm(
         db.commit()
         return _run_loop(db, session, request_id)
 
-    _audit.log_event(
-        db,
-        session_id=session_id,
-        user_id=user_id,
-        event_type="confirmation_approved",
-        actor="user",
-        tool_name=tool_name,
-        tool_args=arguments,
-        rule_name=session.pending_rule_name,
-        reason=session.pending_reason,
-        request_id=request_id,
-    )
-
-    result = _execute_tool(db, user_id, session_id, tool_name, arguments)
-    if tool_name == "add_to_cart" and "error" not in result:
-        _maybe_record_agent_spend(db, arguments, result)
-        result = _process_add_to_cart_upsell(db, session, arguments, result, request_id)
-    agent_session_repo.append_message(
-        db, session_id, "tool", content=json.dumps(result), tool_call_id=tool_call_id, tool_name=tool_name
-    )
-    _audit.log_event(
-        db,
-        session_id=session_id,
-        user_id=user_id,
-        event_type="tool_executed",
-        actor="agent",
-        tool_name=tool_name,
-        tool_args=arguments,
-        tool_result=result,
-        decision="ALLOW",
-        reason="Executed after explicit user confirmation.",
-        request_id=request_id,
+    result = _finalize_tool_execution(
+        db, session, tool_call_id, tool_name, arguments, request_id, confirmed=True, confirmation_source="chat"
     )
     agent_session_repo.clear_pending(db, session)
     db.commit()
@@ -230,8 +219,7 @@ def handle_confirm(
         # conversation can meaningfully continue — surface it immediately
         # rather than looping the model again.
         return HarnessResult(
-            reply=f"Order created — ₹{payment_info['amount_paise'] / 100:.2f}. "
-            "Complete the payment in the checkout popup.",
+            reply=_payment_reply(payment_info),
             status="completed",
             pending=None,
             cart=_cart_dict(db, user_id),
@@ -354,6 +342,268 @@ def _run_loop(db: Session, session, request_id: str | None) -> HarnessResult:
     )
 
 
+def _payment_reply(payment_info: dict) -> str:
+    amount = payment_info["amount_paise"] / 100
+    if payment_info.get("status") == "PAID":
+        # Deliberately does not say "paid" without qualification: the Razorpay
+        # order is real, but this capture was signed locally and Razorpay never
+        # processed it. See docs/PAYMENT-REALITY.md.
+        return (
+            f"Order #{payment_info['order_id']} placed — ₹{amount:.2f}. "
+            "(Test mode: the Razorpay order is real; the capture was simulated locally.)"
+        )
+    return f"Order created — ₹{amount:.2f}. Complete the payment in the checkout popup."
+
+
+def _auto_complete_agent_payment(db: Session, payment_info: dict, request_id: str | None) -> dict:
+    """Completes an agent-authorized payment server-side, immediately —
+    no Razorpay Checkout popup, no second human confirmation.
+
+    The human already granted this specific agent bounded spending authority
+    once, when they created it (its scopes and its spend_limit_paise). Making
+    them then drive a manual Checkout pass for every individual purchase the
+    agent makes defeats the point of a bounded autonomous agent — the whole
+    premise is that the agent transacts on its own *within that limit*.
+
+    Mechanically this is the exact mechanism /api/payments/test-complete
+    (app/routers/payments.py) already established, and for the same reason it
+    gives: a software agent has no browser to drive Checkout's OTP flow. Only
+    the *signing* is synthetic — the signature verification that actually
+    decides success is the real one, unchanged. Test-mode keys throughout, so
+    no real money moves either way.
+
+    A human buyer paying for themselves (the Buy Now button, or their own
+    non-agent chat) is deliberately NOT affected: they pick their own payment
+    method through the real Checkout, as they should.
+    """
+    order = order_repo.get_by_id(db, payment_info.get("order_id"))
+    if order is None:
+        return payment_info
+
+    payment_id = f"pay_auto_{uuid.uuid4().hex[:12]}"
+    razorpay_order_id = payment_info["razorpay_order_id"]
+    signature = hmac.new(
+        settings.razorpay_key_secret.encode(),
+        f"{razorpay_order_id}|{payment_id}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not payment_gateway.verify_signature(razorpay_order_id, payment_id, signature):
+        # Should be unreachable (we just signed it with the real secret), but
+        # never mark an order paid on an unverified signature — leave it
+        # AWAITING_CONFIRMATION so the caller can fall back to real Checkout.
+        return payment_info
+
+    order_service.mark_paid(
+        db,
+        order,
+        razorpay_payment_id=payment_id,
+        method="agent_autonomous",
+        raw_response={"razorpay_order_id": razorpay_order_id, "razorpay_payment_id": payment_id},
+    )
+    _audit.log_event(
+        db,
+        session_id=order.session_id,
+        user_id=order.user_id,
+        event_type="payment_succeeded",
+        actor="agent",
+        tool_args={"razorpay_payment_id": payment_id, "completed_by": "agent_autonomous"},
+        reason=f"Payment {payment_id} captured autonomously for order {order.id} — within this agent's granted spend limit, "
+        "no further human confirmation required.",
+        request_id=request_id,
+    )
+    return {**payment_info, "status": "PAID", "razorpay_payment_id": payment_id}
+
+
+def _finalize_tool_execution(
+    db: Session,
+    session,
+    tool_call_id: str,
+    tool_name: str,
+    args: dict,
+    request_id: str | None,
+    *,
+    confirmed: bool,
+    confirmation_source: str | None = None,
+) -> dict:
+    """Executes tool_name(args) and records it — the one place a tool
+    actually runs after the policy engine has said ALLOW, or after a
+    REQUIRE_CONFIRMATION has been explicitly approved. Shared by
+    _handle_tool_call's ALLOW branch, handle_confirm's approve=True branch,
+    and quick_purchase's auto-approval, so all three produce identical
+    tool_executed audit shapes.
+
+    `confirmed=True` additionally logs a confirmation_approved event first,
+    tagged with `confirmation_source` ("chat" or "product_card") in its
+    tool_args — otherwise a chat-confirmed payment and a product card's
+    one-click confirm-to-buy would be indistinguishable in session replay.
+    """
+    session_id = session.session_id
+    user_id = session.user_id
+
+    if confirmed:
+        _audit.log_event(
+            db,
+            session_id=session_id,
+            user_id=user_id,
+            event_type="confirmation_approved",
+            actor="user",
+            tool_name=tool_name,
+            tool_args={"confirmation_source": confirmation_source, **args},
+            rule_name=session.pending_rule_name,
+            reason=session.pending_reason,
+            request_id=request_id,
+        )
+
+    result = _execute_tool(db, user_id, session_id, tool_name, args)
+    if tool_name == "add_to_cart" and "error" not in result:
+        _maybe_record_agent_spend(db, args, result)
+        result = _process_add_to_cart_upsell(db, session, args, result, request_id)
+    if tool_name == "initiate_payment" and "error" not in result:
+        principal = get_current_principal()
+        if principal is not None and principal.type == "agent":
+            result = _auto_complete_agent_payment(db, result, request_id)
+    agent_session_repo.append_message(
+        db, session_id, "tool", content=json.dumps(result), tool_call_id=tool_call_id, tool_name=tool_name
+    )
+    _audit.log_event(
+        db,
+        session_id=session_id,
+        user_id=user_id,
+        event_type="tool_executed",
+        actor="agent",
+        tool_name=tool_name,
+        tool_args=args,
+        tool_result=result,
+        decision="ALLOW",
+        reason="Executed after explicit user confirmation." if confirmed else None,
+        request_id=request_id,
+    )
+    db.commit()
+    return result
+
+
+def _propose_and_resolve(
+    db: Session, session, tool_name: str, args: dict, request_id: str | None, *, confirmation_source: str
+) -> tuple[str, dict]:
+    """Evaluates policy for one synthetic tool call — no model involved —
+    and resolves it immediately: ALLOW executes now; REQUIRE_CONFIRMATION is
+    treated as already confirmed (the caller only reaches here because a
+    human already gave explicit, specific intent for this exact action —
+    e.g. a product card's Confirm click); DENY returns the policy's own
+    reason as-is. Used by quick_purchase() to compose add_to_cart then
+    initiate_payment into one request with no LLM round-trip, while still
+    going through the identical policy evaluation and execution primitives
+    every model-proposed tool call does. Returns ("denied" | "executed",
+    result_dict)."""
+    session_id = session.session_id
+    user_id = session.user_id
+    tool_call_id = f"quickbuy-{tool_name}-{uuid.uuid4().hex[:8]}"
+
+    action = _build_proposed_state(db, session, tool_name, args)
+    decision_result = _policy.evaluate(action)
+    _audit.log_event(
+        db,
+        session_id=session_id,
+        user_id=user_id,
+        event_type="policy_decision",
+        actor="policy",
+        tool_name=tool_name,
+        tool_args=args,
+        decision=decision_result.decision.value,
+        rule_name=decision_result.rule_name,
+        reason=decision_result.reason,
+        request_id=request_id,
+    )
+
+    if decision_result.decision == Decision.DENY:
+        agent_session_repo.append_message(
+            db,
+            session_id,
+            "tool",
+            content=json.dumps({"error": decision_result.reason, "rule": decision_result.rule_name}),
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+        )
+        db.commit()
+        return "denied", {"error": decision_result.reason, "rule_name": decision_result.rule_name}
+
+    if decision_result.decision == Decision.REQUIRE_CONFIRMATION:
+        agent_session_repo.set_pending(
+            db,
+            session,
+            {"id": tool_call_id, "name": tool_name, "arguments": args},
+            decision_result.rule_name,
+            decision_result.reason,
+        )
+        db.commit()
+        result = _finalize_tool_execution(
+            db, session, tool_call_id, tool_name, args, request_id,
+            confirmed=True, confirmation_source=confirmation_source,
+        )
+        agent_session_repo.clear_pending(db, session)
+        db.commit()
+        return "executed", result
+
+    # ALLOW
+    result = _finalize_tool_execution(db, session, tool_call_id, tool_name, args, request_id, confirmed=False)
+    return "executed", result
+
+
+def quick_purchase(
+    db: Session, session_id: str, user_id: str, sku: str, quantity: int, request_id: str | None
+) -> HarnessResult:
+    """The product card's one-click "Confirm & Buy": add_to_cart then
+    initiate_payment, back to back, in one request — no LLM call, so no
+    inference round-trip can second-guess or delay it. Every rule that would
+    apply to a model-proposed add_to_cart/initiate_payment still applies
+    here exactly the same way (AgentScopeRule, AgentSpendLimitRule,
+    StockRule, PaymentAuthorizationRule's re-validation, ...) via
+    _propose_and_resolve — the click itself stands in for the human
+    confirmation a chat-driven payment would otherwise wait for a second
+    round-trip to collect, and that substitution is recorded explicitly
+    (confirmation_source="product_card") rather than left indistinguishable
+    from a chat confirmation in the audit trail.
+    """
+    session = agent_session_repo.get_or_create_session(db, session_id, user_id, budget_paise=None)
+    if session.user_id != user_id:
+        raise SessionOwnershipError(f"Session '{session_id}' does not belong to this principal.")
+
+    outcome, result = _propose_and_resolve(
+        db, session, "add_to_cart", {"sku": sku, "quantity": quantity}, request_id,
+        confirmation_source="product_card",
+    )
+    if outcome == "denied" or "error" in result:
+        return HarnessResult(
+            reply=result.get("error", "Could not add this item to the cart."),
+            status="completed",
+            pending=None,
+            cart=_cart_dict(db, user_id),
+            upsell=_upsell_dict(db, session_id),
+        )
+
+    outcome, result = _propose_and_resolve(
+        db, session, "initiate_payment", {}, request_id, confirmation_source="product_card"
+    )
+    if outcome == "denied" or "error" in result:
+        return HarnessResult(
+            reply=result.get("error", "Could not start checkout."),
+            status="completed",
+            pending=None,
+            cart=_cart_dict(db, user_id),
+            upsell=_upsell_dict(db, session_id),
+        )
+
+    return HarnessResult(
+        reply=_payment_reply(result),
+        status="completed",
+        pending=None,
+        cart=_cart_dict(db, user_id),
+        payment=result,
+        upsell=_upsell_dict(db, session_id),
+    )
+
+
 def _handle_tool_call(db: Session, session, tc: GatewayToolCall, request_id: str | None) -> HarnessResult | None:
     """Returns a HarnessResult if the loop must stop here (confirmation needed
     or a hard model-side failure), or None if the loop should continue."""
@@ -438,26 +688,18 @@ def _handle_tool_call(db: Session, session, tc: GatewayToolCall, request_id: str
         )
 
     # ALLOW
-    result = _execute_tool(db, user_id, session_id, tc.name, args)
-    if tc.name == "add_to_cart" and "error" not in result:
-        _maybe_record_agent_spend(db, args, result)
-        result = _process_add_to_cart_upsell(db, session, args, result, request_id)
-    agent_session_repo.append_message(
-        db, session_id, "tool", content=json.dumps(result), tool_call_id=tc.id, tool_name=tc.name
-    )
-    _audit.log_event(
-        db,
-        session_id=session_id,
-        user_id=user_id,
-        event_type="tool_executed",
-        actor="agent",
-        tool_name=tc.name,
-        tool_args=args,
-        tool_result=result,
-        decision="ALLOW",
-        request_id=request_id,
-    )
-    db.commit()
+    result = _finalize_tool_execution(db, session, tc.id, tc.name, args, request_id, confirmed=False)
+    if tc.name == "present_product" and "error" not in result:
+        # A structured recommendation is a complete turn on its own — the
+        # user acts on the card, not on another round of tool calls.
+        return HarnessResult(
+            reply=result.get("note") or f"{result.get('name')} — {result.get('price_display')}",
+            status="completed",
+            pending=None,
+            cart=_cart_dict(db, user_id),
+            product_suggestion=result,
+            upsell=_upsell_dict(db, session_id),
+        )
     return None
 
 

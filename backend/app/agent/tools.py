@@ -103,6 +103,28 @@ def get_product(db: Session, user_id: str, session_id: str, sku: str) -> dict:
     }
 
 
+def present_product(db: Session, user_id: str, session_id: str, sku: str, within_budget: bool, note: str) -> dict:
+    """Non-mutating — marks one specific catalog item as the assistant's
+    structured recommendation for this turn, rendered as a card in the UI
+    instead of only described in prose. Price/stock/unit are looked up fresh
+    here, never trusted from the model's own claim about them, same
+    discipline as every other tool result the model is handed."""
+    try:
+        product = product_service.get_product_by_sku(db, sku)
+    except HTTPException:
+        return {"error": f"SKU '{sku}' was not found in the catalog."}
+    return {
+        "sku": product.sku,
+        "name": product.name,
+        "unit": product.unit,
+        "price_paise": product.effective_price_paise,
+        "price_display": product.effective_price_display,
+        "stock": product.stock,
+        "within_budget": within_budget,
+        "note": note,
+    }
+
+
 def add_to_cart(db: Session, user_id: str, sku: str, quantity: int = 1) -> dict:
     cart = cart_service.add_item(db, user_id, CartItemCreate(sku=sku, quantity=quantity))
     return cart.model_dump(mode="json")
@@ -306,6 +328,7 @@ def initiate_payment(db: Session, user_id: str, session_id: str) -> dict:
 TOOL_FUNCTIONS = {
     "search_products": lambda db, user_id, session_id, **kw: search_products(db, user_id, session_id, **kw),
     "get_product": lambda db, user_id, session_id, **kw: get_product(db, user_id, session_id, **kw),
+    "present_product": lambda db, user_id, session_id, **kw: present_product(db, user_id, session_id, **kw),
     "add_to_cart": lambda db, user_id, session_id, **kw: add_to_cart(db, user_id, **kw),
     "view_cart": lambda db, user_id, session_id, **kw: view_cart(db, user_id),
     "remove_from_cart": lambda db, user_id, session_id, **kw: remove_from_cart(db, user_id, **kw),
@@ -348,6 +371,33 @@ TOOL_SCHEMAS = [
                 "type": "object",
                 "properties": {"sku": {"type": "string", "description": "The product SKU, e.g. 'PET-001'."}},
                 "required": ["sku"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "present_product",
+            "description": "Present one specific product as a structured recommendation card to the "
+            "user, instead of only describing it in prose — use this once you've picked the best match "
+            "for a stated item + budget request (or the closest available alternative, if nothing fits). "
+            "Does not add anything to the cart; the user buys it themselves via the card's own button.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sku": {"type": "string", "description": "The exact SKU of the product to present."},
+                    "within_budget": {
+                        "type": "boolean",
+                        "description": "True if this fits the budget the user stated; false if it's the closest "
+                        "available option but exceeds it.",
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "One short sentence for the card, e.g. 'Within your ₹400 budget.' or "
+                        "'Closest match — ₹450, over your ₹400 budget.'",
+                    },
+                },
+                "required": ["sku", "within_budget", "note"],
             },
         },
     },

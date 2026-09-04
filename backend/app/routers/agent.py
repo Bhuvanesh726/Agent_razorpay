@@ -7,12 +7,20 @@ from app.auth.deps import get_principal
 from app.auth.principal import Principal
 from app.auth.routing import AuthRequirement, SecureAPIRoute, requires
 from app.database import get_db
-from app.schemas.agent import ChatRequest, ChatResponse, ConfirmRequest, PaymentInfoOut, PendingActionOut, UpsellOfferOut
+from app.schemas.agent import (
+    ChatRequest,
+    ChatResponse,
+    ConfirmRequest,
+    PaymentInfoOut,
+    PendingActionOut,
+    ProductSuggestionOut,
+    UpsellOfferOut,
+)
 
 router = APIRouter(tags=["agent"], route_class=SecureAPIRoute)
 
 
-def _to_response(result) -> ChatResponse:
+def to_response(result) -> ChatResponse:
     return ChatResponse(
         reply=result.reply,
         status=result.status,
@@ -20,7 +28,9 @@ def _to_response(result) -> ChatResponse:
         cart=result.cart,
         payment=PaymentInfoOut(**result.payment) if result.payment else None,
         upsell=UpsellOfferOut(**result.upsell) if result.upsell else None,
+        product_suggestion=ProductSuggestionOut(**result.product_suggestion) if result.product_suggestion else None,
     )
+
 
 
 @router.post("/api/agent/chat", response_model=ChatResponse)
@@ -38,7 +48,7 @@ def chat(
         )
     except SessionOwnershipError:
         raise HTTPException(status_code=403, detail="This session belongs to a different principal.")
-    return _to_response(result)
+    return to_response(result)
 
 
 @router.post("/api/agent/confirm", response_model=ChatResponse)
@@ -54,4 +64,4 @@ def confirm(
         result = harness.handle_confirm(db, payload.session_id, principal.user_id, payload.approve, request_id)
     except SessionOwnershipError:
         raise HTTPException(status_code=403, detail="This session belongs to a different principal.")
-    return _to_response(result)
+    return to_response(result)

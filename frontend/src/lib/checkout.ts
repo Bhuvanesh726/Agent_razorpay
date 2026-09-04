@@ -93,6 +93,7 @@ export function openRazorpayCheckout(payment: PaymentInfo, description: string, 
 }
 
 const SESSION_STORAGE_KEY = "razorpay-agent-session-id";
+const AGENT_SESSION_STORAGE_PREFIX = "razorpay-agent-session-id:";
 
 export function getOrCreateSessionId(): string {
   if (typeof window === "undefined") return "";
@@ -104,5 +105,44 @@ export function getOrCreateSessionId(): string {
     return created;
   } catch {
     return crypto.randomUUID();
+  }
+}
+
+// One conversation per (buyer, agent credential) — a session id is tied to
+// a single AgentCredential's own scopes/spend limit for its whole
+// lifetime, so switching agents must never reuse another agent's session.
+export function getOrCreateAgentSessionId(credentialId: string): string {
+  if (typeof window === "undefined") return "";
+  const key = AGENT_SESSION_STORAGE_PREFIX + credentialId;
+  try {
+    const existing = window.localStorage.getItem(key);
+    if (existing) return existing;
+    const created = crypto.randomUUID();
+    window.localStorage.setItem(key, created);
+    return created;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+// Every chat session id is browser-scoped (localStorage), not user-scoped —
+// if the JWT changes to a different signed-in principal (a fresh login, a
+// different account on the same browser) while a stale session id from the
+// previous principal is still stored, the backend's ownership check on
+// that AgentSession row rejects the very first message with "This session
+// belongs to a different principal." Call this whenever the identity behind
+// the token changes, so fresh session ids are minted for the new principal
+// — sweeps both the bare key and every per-agent-credential key.
+export function clearSessionId(): void {
+  try {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    const staleKeys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(AGENT_SESSION_STORAGE_PREFIX)) staleKeys.push(key);
+    }
+    for (const key of staleKeys) window.localStorage.removeItem(key);
+  } catch {
+    // ignore
   }
 }

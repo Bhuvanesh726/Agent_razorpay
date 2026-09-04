@@ -135,7 +135,7 @@ class Settings(BaseSettings):
     # from — one source of truth shared by the frontend's scope checkboxes
     # and the credential-creation endpoint's validation.
     agent_available_scopes: str = (
-        "search_products,get_product,add_to_cart,view_cart,remove_from_cart,"
+        "search_products,get_product,present_product,add_to_cart,view_cart,remove_from_cart,"
         "initiate_payment,decline_upsell,report_content_gap"
     )
 

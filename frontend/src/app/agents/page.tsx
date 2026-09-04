@@ -22,6 +22,7 @@ import { Table, TableWrap, THead, Th, Tr, Td } from "@/components/ui/Table";
 const AVAILABLE_SCOPES = [
   "search_products",
   "get_product",
+  "present_product",
   "add_to_cart",
   "view_cart",
   "remove_from_cart",
@@ -59,7 +60,9 @@ function KeyRevealDialog({ agent, onClose }: { agent: AgentCreateResponse; onClo
 function CreateAgentForm({ onCreated }: { onCreated: (agent: AgentCreateResponse) => void }) {
   const [name, setName] = useState("");
   const [deliveryMode, setDeliveryMode] = useState<"EMBEDDED" | "EXTERNAL">("EMBEDDED");
-  const [scopes, setScopes] = useState<Set<string>>(new Set(["search_products", "get_product", "add_to_cart", "view_cart"]));
+  const [scopes, setScopes] = useState<Set<string>>(
+    new Set(["search_products", "get_product", "present_product", "add_to_cart", "view_cart"])
+  );
   const [spendLimitInput, setSpendLimitInput] = useState("500");
   const [standingInstruction, setStandingInstruction] = useState("");
   const [submitting, setSubmitting] = useState(false);

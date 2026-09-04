@@ -127,6 +127,51 @@ export function confirmPendingAction(sessionId: string, approve: boolean): Promi
   );
 }
 
+// Interactive chat scoped to one specific embedded agent credential — the
+// credential's own spend_limit_paise/scopes are the only cap, no separate
+// budget field. See app/auth/credentials_router.py's chat/confirm/quick-buy.
+export function sendAgentCredentialMessage(
+  credentialId: string,
+  sessionId: string,
+  message: string
+): Promise<AgentChatResponse> {
+  return request<AgentChatResponse>(
+    `/api/agents/${credentialId}/chat`,
+    { method: "POST", body: JSON.stringify({ session_id: sessionId, message }) },
+    AGENT_REQUEST_TIMEOUT_MS
+  );
+}
+
+export function confirmAgentCredentialAction(
+  credentialId: string,
+  sessionId: string,
+  approve: boolean
+): Promise<AgentChatResponse> {
+  return request<AgentChatResponse>(
+    `/api/agents/${credentialId}/confirm`,
+    { method: "POST", body: JSON.stringify({ session_id: sessionId, approve }) },
+    AGENT_REQUEST_TIMEOUT_MS
+  );
+}
+
+// The product recommendation card's one-click "Confirm & Buy" — add to
+// cart and start checkout in one call, fully policy-checked, no chat
+// round-trip. Returns PaymentInfo to open Razorpay Checkout immediately,
+// or throws with the policy denial's own reason (e.g. out of scope, over
+// the agent's spend limit).
+export function quickBuy(
+  credentialId: string,
+  sessionId: string,
+  sku: string,
+  quantity: number = 1
+): Promise<PaymentInfo> {
+  return request<PaymentInfo>(
+    `/api/agents/${credentialId}/quick-buy`,
+    { method: "POST", body: JSON.stringify({ session_id: sessionId, sku, quantity }) },
+    AGENT_REQUEST_TIMEOUT_MS
+  );
+}
+
 export function fetchAuditTrail(sessionId: string): Promise<AuditTrail> {
   return request<AuditTrail>(`/api/audit/${sessionId}`);
 }

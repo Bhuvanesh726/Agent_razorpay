@@ -2,22 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ScrollText, ShieldAlert, Sparkles } from "lucide-react";
-import { confirmPendingAction, fetchAuditTrail, sendAgentMessage } from "@/lib/api";
-import { getOrCreateSessionId, openRazorpayCheckout } from "@/lib/checkout";
-import type { AuditTrail, ChatMessage, PaymentInfo, PendingAction, UpsellOffer } from "@/lib/types";
+import { confirmAgentCredentialAction, fetchAuditTrail, sendAgentCredentialMessage } from "@/lib/api";
+import { getOrCreateAgentSessionId, openRazorpayCheckout } from "@/lib/checkout";
+import type { AgentSummary, AuditTrail, ChatMessage, PaymentInfo, PendingAction, ProductSuggestion, UpsellOffer } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Table, TableWrap, THead, Th, Tr, Td } from "@/components/ui/Table";
+import ProductSuggestionCard from "@/components/ProductSuggestionCard";
 
 interface Props {
+  agents: AgentSummary[];
   onCartChanged: () => void;
-}
-
-function rupeesToPaise(value: string): number | null {
-  const n = Number(value);
-  if (!value.trim() || Number.isNaN(n) || n < 0) return null;
-  return Math.round(n * 100);
 }
 
 function formatTime(ms: number): string {
@@ -42,10 +38,9 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export default function ChatPanel({ onCartChanged }: Props) {
-  const [sessionId] = useState(() => getOrCreateSessionId());
-  const [budgetInput, setBudgetInput] = useState("");
-  const [budgetLocked, setBudgetLocked] = useState(false);
+export default function ChatPanel({ agents, onCartChanged }: Props) {
+  const [activeCredentialId, setActiveCredentialId] = useState(() => agents[0]?.id ?? "");
+  const [sessionId, setSessionId] = useState(() => getOrCreateAgentSessionId(agents[0]?.id ?? ""));
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -53,6 +48,7 @@ export default function ChatPanel({ onCartChanged }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [upsell, setUpsell] = useState<UpsellOffer | null>(null);
   const [respondingToUpsell, setRespondingToUpsell] = useState(false);
+  const [productSuggestion, setProductSuggestion] = useState<ProductSuggestion | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAudit, setShowAudit] = useState(false);
   const [auditTrail, setAuditTrail] = useState<AuditTrail | null>(null);
@@ -60,15 +56,36 @@ export default function ChatPanel({ onCartChanged }: Props) {
   const [payingOrderId, setPayingOrderId] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const activeAgent = agents.find((a) => a.id === activeCredentialId) ?? null;
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, pending]);
+  }, [messages, pending, productSuggestion]);
+
+  function switchAgent(credentialId: string) {
+    setActiveCredentialId(credentialId);
+    setSessionId(getOrCreateAgentSessionId(credentialId));
+    setMessages([]);
+    setPending(null);
+    setUpsell(null);
+    setProductSuggestion(null);
+    setError(null);
+    setShowAudit(false);
+    setAuditTrail(null);
+  }
 
   function pushMessage(role: ChatMessage["role"], text: string) {
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role, text, timestamp: Date.now() }]);
   }
 
   function openCheckout(payment: PaymentInfo) {
+    if (payment.status === "PAID") {
+      // Agent-authorized payments complete server-side, within the spend
+      // limit the buyer already granted this agent — nothing to confirm again.
+      onCartChanged();
+      if (showAudit) refreshAudit();
+      return;
+    }
     setPayingOrderId(payment.order_id);
     openRazorpayCheckout(payment, `Order #${payment.order_id}`, {
       onSuccess: (result) => {
@@ -99,18 +116,18 @@ export default function ChatPanel({ onCartChanged }: Props) {
 
   async function handleSend() {
     const text = input.trim();
-    if (!text || sending || pending) return;
+    if (!text || sending || pending || !activeCredentialId) return;
     setInput("");
     pushMessage("user", text);
     setSending(true);
     setError(null);
+    setProductSuggestion(null);
     try {
-      const budgetPaise = budgetLocked ? null : rupeesToPaise(budgetInput);
-      if (!budgetLocked && budgetPaise != null) setBudgetLocked(true);
-      const res = await sendAgentMessage(sessionId, text, budgetLocked ? undefined : budgetPaise);
+      const res = await sendAgentCredentialMessage(activeCredentialId, sessionId, text);
       pushMessage("assistant", res.reply);
       setPending(res.pending);
       setUpsell(res.upsell);
+      setProductSuggestion(res.product_suggestion);
       onCartChanged();
       if (showAudit) refreshAudit();
       if (res.payment) openCheckout(res.payment);
@@ -125,10 +142,11 @@ export default function ChatPanel({ onCartChanged }: Props) {
     setConfirming(true);
     setError(null);
     try {
-      const res = await confirmPendingAction(sessionId, approve);
+      const res = await confirmAgentCredentialAction(activeCredentialId, sessionId, approve);
       pushMessage("assistant", res.reply);
       setPending(res.pending);
       setUpsell(res.upsell);
+      setProductSuggestion(res.product_suggestion);
       onCartChanged();
       if (showAudit) refreshAudit();
       if (res.payment) openCheckout(res.payment);
@@ -146,10 +164,11 @@ export default function ChatPanel({ onCartChanged }: Props) {
     setError(null);
     pushMessage("user", text);
     try {
-      const res = await sendAgentMessage(sessionId, text);
+      const res = await sendAgentCredentialMessage(activeCredentialId, sessionId, text);
       pushMessage("assistant", res.reply);
       setPending(res.pending);
       setUpsell(res.upsell);
+      setProductSuggestion(res.product_suggestion);
       onCartChanged();
       if (showAudit) refreshAudit();
       if (res.payment) openCheckout(res.payment);
@@ -158,6 +177,18 @@ export default function ChatPanel({ onCartChanged }: Props) {
     } finally {
       setRespondingToUpsell(false);
     }
+  }
+
+  function handleQuickBuySuccess(message: string) {
+    setProductSuggestion(null);
+    pushMessage("assistant", `✅ ${message}`);
+    onCartChanged();
+    if (showAudit) refreshAudit();
+  }
+
+  function handleQuickBuyFailure(message: string) {
+    pushMessage("assistant", `❌ ${message}`);
+    if (showAudit) refreshAudit();
   }
 
   async function refreshAudit() {
@@ -180,45 +211,36 @@ export default function ChatPanel({ onCartChanged }: Props) {
 
   return (
     <div className="flex h-fit flex-col gap-3 rounded-lg border border-line bg-surface p-4 lg:sticky lg:top-[4.5rem]">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold tracking-tight text-ink">Shopping assistant</h2>
+      <div className="flex items-center justify-between gap-2">
+        {agents.length > 1 ? (
+          <select
+            value={activeCredentialId}
+            onChange={(e) => switchAgent(e.target.value)}
+            className="min-w-0 rounded-md border-none bg-transparent text-sm font-semibold tracking-tight text-ink focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <h2 className="truncate text-sm font-semibold tracking-tight text-ink">{activeAgent?.name ?? "Shopping assistant"}</h2>
+        )}
         <button
           onClick={toggleAudit}
-          className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-ink-soft transition-colors duration-150 hover:bg-black/[0.04] hover:text-ink"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-ink-soft transition-colors duration-150 hover:bg-black/[0.04] hover:text-ink"
         >
           <ScrollText size={13} />
           {showAudit ? "Hide" : "Show"} audit trail
         </button>
       </div>
 
-      <div className="flex items-center gap-2 text-sm">
-        <label htmlFor="budget" className="text-ink-soft">
-          Budget ₹
-        </label>
-        <Input
-          id="budget"
-          type="number"
-          min={0}
-          value={budgetInput}
-          onChange={(e) => setBudgetInput(e.target.value)}
-          disabled={budgetLocked}
-          placeholder="e.g. 800"
-          className="w-24 py-1.5"
-        />
-        {budgetLocked && (
-          <button
-            onClick={() => setBudgetLocked(false)}
-            className="text-xs font-medium text-accent hover:text-accent-hover"
-          >
-            change
-          </button>
-        )}
-      </div>
-
       <div ref={scrollRef} className="flex max-h-80 min-h-40 flex-col gap-3 overflow-y-auto border-t border-line pt-3">
         {messages.length === 0 && (
           <p className="text-sm text-ink-faint">
-            Set a budget above, then ask for something — e.g. &ldquo;I need dog food under ₹800&rdquo;.
+            Ask for something to buy — e.g. &ldquo;5kg atta under ₹400&rdquo;. {activeAgent?.name ?? "This agent"} can
+            only do what it&rsquo;s been scoped to do, up to its own spend limit.
           </p>
         )}
         {messages.map((m) => (
@@ -235,6 +257,16 @@ export default function ChatPanel({ onCartChanged }: Props) {
           </div>
         )}
       </div>
+
+      {productSuggestion && (
+        <ProductSuggestionCard
+          suggestion={productSuggestion}
+          credentialId={activeCredentialId}
+          sessionId={sessionId}
+          onSuccess={handleQuickBuySuccess}
+          onFailure={handleQuickBuyFailure}
+        />
+      )}
 
       {pending && (
         <div className="rounded-lg border border-warning/25 bg-warning-soft p-3.5 text-sm">

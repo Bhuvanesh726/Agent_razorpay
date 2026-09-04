@@ -13,6 +13,17 @@ function paise(p: number): string {
   return `₹${(p / 100).toFixed(2)}`;
 }
 
+// Locally-signed capture ids — the payment was never processed by Razorpay and
+// will not resolve in their API. Kept as a prefix check because that is exactly
+// how the ids are minted (app/routers/payments.py::test_complete_payment and
+// app/agent/harness.py::_auto_complete_agent_payment). Verify any order for
+// yourself with backend/scripts/verify_payments.py; see docs/PAYMENT-REALITY.md.
+const SIMULATED_PAYMENT_PREFIXES = ["pay_test_", "pay_auto_", "pay_demo"];
+
+function isSimulatedCapture(paymentId: string | null): boolean {
+  return !!paymentId && SIMULATED_PAYMENT_PREFIXES.some((prefix) => paymentId.startsWith(prefix));
+}
+
 interface Props {
   orderId: number;
   onClose: () => void;
@@ -122,9 +133,23 @@ export default function OrderDetailModal({ orderId, onClose, showBuyer = false }
           )}
 
           {order.status === "PAID" && order.razorpay_payment_id && (
-            <p className="mt-4 text-xs text-ink-faint">
-              Payment ID <span className="font-mono text-ink-soft">{order.razorpay_payment_id}</span>
-            </p>
+            <div className="mt-4">
+              <p className="text-xs text-ink-faint">
+                Payment ID <span className="font-mono text-ink-soft">{order.razorpay_payment_id}</span>
+              </p>
+              {isSimulatedCapture(order.razorpay_payment_id) && (
+                <div className="mt-2 rounded-lg border border-warning/25 bg-warning-soft p-3 text-xs">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0 text-warning" />
+                    <p className="text-warning">
+                      <span className="font-medium">Simulated capture (test mode).</span> The Razorpay order is real,
+                      but this payment id was signed locally — Razorpay never processed it, so it will not resolve in
+                      their dashboard or API. See <span className="font-mono">docs/PAYMENT-REALITY.md</span>.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </>
       )}

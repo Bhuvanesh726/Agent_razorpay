@@ -7,6 +7,21 @@ class ChatRequest(BaseModel):
     budget_paise: int | None = None
 
 
+class AgentChatRequest(BaseModel):
+    """Interactive chat scoped to a specific AgentCredential — no budget
+    field: the credential's own spend_limit_paise is the only cap. See
+    POST /api/agents/{credential_id}/chat."""
+
+    session_id: str
+    message: str
+
+
+class QuickBuyRequest(BaseModel):
+    session_id: str
+    sku: str
+    quantity: int = 1
+
+
 class ConfirmRequest(BaseModel):
     session_id: str
     approve: bool = True
@@ -35,6 +50,17 @@ class UpsellOfferOut(BaseModel):
     reason: str
 
 
+class ProductSuggestionOut(BaseModel):
+    sku: str
+    name: str
+    unit: str
+    price_paise: int
+    price_display: str
+    stock: int
+    within_budget: bool
+    note: str
+
+
 class ChatResponse(BaseModel):
     reply: str
     status: str  # "completed" | "awaiting_confirmation" | "iteration_limit"
@@ -42,3 +68,4 @@ class ChatResponse(BaseModel):
     cart: dict
     payment: PaymentInfoOut | None = None
     upsell: UpsellOfferOut | None = None
+    product_suggestion: ProductSuggestionOut | None = None

@@ -8,10 +8,11 @@ field.
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.agent import harness
+from app.agent.harness import SessionOwnershipError
 from app.audit.service import AuditService
 from app.auth.context import reset_current_principal, set_current_principal
 from app.auth.deps import get_principal
@@ -21,6 +22,8 @@ from app.auth.security import generate_agent_key, hash_agent_key
 from app.core.config import settings
 from app.database import get_db
 from app.models.agent_credential import AgentCredential
+from app.routers.agent import to_response
+from app.schemas.agent import AgentChatRequest, ChatResponse, ConfirmRequest, PaymentInfoOut, QuickBuyRequest
 from app.schemas.agents import (
     AgentActionOut,
     AgentCreateRequest,
@@ -172,16 +175,7 @@ def run_agent(
     cred.last_used_at = datetime.now(timezone.utc)
     db.commit()
 
-    agent_principal = Principal(
-        type="agent",
-        user_id=cred.owner_user_id,
-        credential_id=cred.id,
-        credential_status=cred.status,
-        scopes=frozenset(cred.scopes or []),
-        spend_limit_paise=cred.spend_limit_paise,
-        spent_paise=cred.spent_paise,
-    )
-    token = set_current_principal(agent_principal)
+    token = set_current_principal(_agent_principal_for(cred))
     try:
         session_id = f"agent-run-{uuid.uuid4().hex[:8]}"
         result = harness.handle_chat(
@@ -191,3 +185,119 @@ def run_agent(
         reset_current_principal(token)
 
     return AgentRunResult(reply=result.reply, status=result.status, cart=result.cart)
+
+
+def _agent_principal_for(cred: AgentCredential) -> Principal:
+    return Principal(
+        type="agent",
+        user_id=cred.owner_user_id,
+        credential_id=cred.id,
+        credential_status=cred.status,
+        scopes=frozenset(cred.scopes or []),
+        spend_limit_paise=cred.spend_limit_paise,
+        spent_paise=cred.spent_paise,
+    )
+
+
+def _get_owned_active_embedded_credential(db: Session, credential_id: str, principal: Principal) -> AgentCredential:
+    """Interactive chat is EMBEDDED-only: an EXTERNAL credential's whole
+    security model is "only whoever holds the raw key can act as it" — the
+    buyer's own login authorizing it here would defeat that, letting anyone
+    who's merely signed in act as a credential without ever needing its key.
+    Same 404 for EXTERNAL/REVOKED as for "doesn't exist"/"not owned" —
+    no extra signal about which case it was."""
+    cred = _get_owned_credential(db, credential_id, principal)
+    if cred.delivery_mode != "EMBEDDED" or cred.status != "ACTIVE":
+        raise HTTPException(status_code=404, detail=f"No agent credential '{credential_id}'.")
+    return cred
+
+
+@router.post("/api/agents/{credential_id}/chat", response_model=ChatResponse)
+@requires(AuthRequirement.BUYER)
+def chat_with_agent(
+    credential_id: str,
+    payload: AgentChatRequest,
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+) -> ChatResponse:
+    """Interactive, multi-turn chat run AS this specific credential — the
+    same principal-construction pattern run_agent() above already uses, but
+    for a real conversation (persistent session_id, no standing_instruction
+    required) instead of a one-shot autonomous run. No budget field in the
+    request: the credential's own spend_limit_paise (AgentSpendLimitRule)
+    is the only cap, exactly like run_agent()'s one-shot call already does.
+    """
+    request_id = getattr(request.state, "request_id", None)
+    cred = _get_owned_active_embedded_credential(db, credential_id, principal)
+    cred.last_used_at = datetime.now(timezone.utc)
+    db.commit()
+
+    token = set_current_principal(_agent_principal_for(cred))
+    try:
+        result = harness.handle_chat(
+            db, payload.session_id, cred.owner_user_id, payload.message, cred.spend_limit_paise, request_id
+        )
+    except SessionOwnershipError:
+        raise HTTPException(status_code=403, detail="This session belongs to a different principal.")
+    finally:
+        reset_current_principal(token)
+    return to_response(result)
+
+
+@router.post("/api/agents/{credential_id}/confirm", response_model=ChatResponse)
+@requires(AuthRequirement.BUYER)
+def confirm_agent_action(
+    credential_id: str,
+    payload: ConfirmRequest,
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+) -> ChatResponse:
+    request_id = getattr(request.state, "request_id", None)
+    cred = _get_owned_active_embedded_credential(db, credential_id, principal)
+    cred.last_used_at = datetime.now(timezone.utc)
+    db.commit()
+
+    token = set_current_principal(_agent_principal_for(cred))
+    try:
+        result = harness.handle_confirm(db, payload.session_id, cred.owner_user_id, payload.approve, request_id)
+    except SessionOwnershipError:
+        raise HTTPException(status_code=403, detail="This session belongs to a different principal.")
+    finally:
+        reset_current_principal(token)
+    return to_response(result)
+
+
+@router.post("/api/agents/{credential_id}/quick-buy", response_model=PaymentInfoOut)
+@requires(AuthRequirement.BUYER)
+def quick_buy(
+    credential_id: str,
+    payload: QuickBuyRequest,
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+) -> PaymentInfoOut:
+    """The product recommendation card's one-click "Confirm & Buy" — see
+    app/agent/harness.py::quick_purchase for what actually happens (fully
+    policy-checked, no LLM call involved; the click itself stands in for
+    the confirmation a chat-driven payment would otherwise need a second
+    round-trip to collect)."""
+    request_id = getattr(request.state, "request_id", None)
+    cred = _get_owned_active_embedded_credential(db, credential_id, principal)
+    cred.last_used_at = datetime.now(timezone.utc)
+    db.commit()
+
+    token = set_current_principal(_agent_principal_for(cred))
+    try:
+        result = harness.quick_purchase(
+            db, payload.session_id, cred.owner_user_id, payload.sku, payload.quantity, request_id
+        )
+    except SessionOwnershipError:
+        raise HTTPException(status_code=403, detail="This session belongs to a different principal.")
+    finally:
+        reset_current_principal(token)
+
+    if result.payment is None:
+        raise HTTPException(status_code=400, detail=result.reply)
+    return PaymentInfoOut(**result.payment)

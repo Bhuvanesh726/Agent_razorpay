@@ -74,6 +74,17 @@ export interface UpsellOffer {
   reason: string;
 }
 
+export interface ProductSuggestion {
+  sku: string;
+  name: string;
+  unit: string;
+  price_paise: number;
+  price_display: string;
+  stock: number;
+  within_budget: boolean;
+  note: string;
+}
+
 export interface AgentChatResponse {
   reply: string;
   status: "completed" | "awaiting_confirmation" | "iteration_limit";
@@ -81,6 +92,7 @@ export interface AgentChatResponse {
   cart: Cart;
   payment: PaymentInfo | null;
   upsell: UpsellOffer | null;
+  product_suggestion: ProductSuggestion | null;
 }
 
 export interface PaymentResult {
