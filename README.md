@@ -112,6 +112,9 @@ them.
 - **[Failures.md](Failures.md)** — what broke and what I got wrong, including a real
   reconciliation gap on order #23 where Razorpay holds a captured ₹275 payment that our
   database records as `FAILED`.
+- **[docs/SYSTEM-AUDIT.md](docs/SYSTEM-AUDIT.md)** — a pre-submission sweep of the whole system:
+  what was verified against the running app, the four defects it found and fixed, the two metrics
+  it found overstated, and what it deliberately did not cover.
 
 To verify any of this yourself against the live API:
 
