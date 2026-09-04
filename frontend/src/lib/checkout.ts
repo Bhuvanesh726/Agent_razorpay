@@ -125,6 +125,19 @@ export function getOrCreateAgentSessionId(credentialId: string): string {
   }
 }
 
+// Layer 7: opening a past conversation makes it the active one for this
+// agent, so a reload resumes where the buyer left off instead of silently
+// dropping them back into the newest session.
+export function setActiveAgentSessionId(credentialId: string, sessionId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(AGENT_SESSION_STORAGE_PREFIX + credentialId, sessionId);
+  } catch {
+    // Storage unavailable — the session is still active in memory for this
+    // tab, it just won't survive a reload. Not worth surfacing.
+  }
+}
+
 // Every chat session id is browser-scoped (localStorage), not user-scoped —
 // if the JWT changes to a different signed-in principal (a fresh login, a
 // different account on the same browser) while a stale session id from the

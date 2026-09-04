@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -21,12 +23,72 @@ def get_or_create_session(
 ) -> AgentSession:
     session = get_session(db, session_id)
     if session is None:
-        session = AgentSession(session_id=session_id, user_id=user_id, budget_paise=budget_paise)
+        session = AgentSession(
+            session_id=session_id,
+            user_id=user_id,
+            budget_paise=budget_paise,
+            credential_id=_acting_credential_id(),
+        )
         db.add(session)
         db.flush()
-    elif budget_paise is not None:
-        session.budget_paise = budget_paise
+    else:
+        if budget_paise is not None:
+            session.budget_paise = budget_paise
+        # Backfill for sessions that predate Layer 7's credential_id column,
+        # so existing conversations appear in the history list of the agent
+        # that is actually driving them rather than vanishing.
+        if session.credential_id is None:
+            session.credential_id = _acting_credential_id()
     return session
+
+
+def _acting_credential_id() -> str | None:
+    """The credential of the principal on this request, when it is an agent.
+
+    Read from the contextvar rather than threaded through every caller — the
+    same reason app/auth/context.py exists at all. A human buyer driving the
+    chat directly has no credential and gets None.
+    """
+    from app.auth.context import get_current_principal
+
+    principal = get_current_principal()
+    if principal is None or principal.type != "agent":
+        return None
+    return principal.credential_id
+
+
+def list_conversations(
+    db: Session,
+    *,
+    user_id: str,
+    credential_id: str | None = None,
+    include_archived: bool = False,
+    limit: int = 50,
+) -> list[AgentSession]:
+    """History list, most recently active first.
+
+    Always filtered by user_id: a conversation belongs to a buyer, and
+    credential_id alone would let a revoked-then-reissued credential id surface
+    someone else's history. credential_id narrows it further to one agent,
+    which is how the chat header's history button scopes the list.
+
+    Sessions with no messages are excluded — an id minted by opening the chat
+    and never typing is not a conversation, and would otherwise fill the list
+    with blank rows.
+    """
+    stmt = (
+        select(AgentSession)
+        .where(AgentSession.user_id == user_id, AgentSession.message_count > 0)
+        .order_by(
+            func.coalesce(AgentSession.last_active_at, AgentSession.updated_at).desc()
+        )
+        .limit(limit)
+    )
+    if credential_id is not None:
+        stmt = stmt.where(AgentSession.credential_id == credential_id)
+    if not include_archived:
+        stmt = stmt.where(AgentSession.archived.is_(False))
+    return list(db.scalars(stmt))
 
 
 def list_messages(db: Session, session_id: str) -> list[AgentMessage]:
@@ -61,6 +123,14 @@ def append_message(
         tool_name=tool_name,
     )
     db.add(message)
+
+    # Denormalised counters, maintained here so the history list never has to
+    # aggregate messages per conversation to render a row.
+    session = get_session(db, session_id)
+    if session is not None:
+        session.message_count = (session.message_count or 0) + 1
+        session.last_active_at = datetime.now(timezone.utc)
+
     db.flush()
     return message
 

@@ -248,6 +248,31 @@ export interface RoleChoiceResult {
   token: string;
 }
 
+export interface ConversationSummary {
+  session_id: string;
+  title: string | null;
+  message_count: number;
+  last_active_at: string | null;
+  created_at: string;
+  archived: boolean;
+  status: string;
+}
+
+export interface ConversationMessage {
+  seq: number;
+  role: string;
+  content: string | null;
+  tool_name: string | null;
+}
+
+export interface ConversationDetail {
+  session_id: string;
+  title: string | null;
+  archived: boolean;
+  status: string;
+  messages: ConversationMessage[];
+}
+
 export interface DemoPrincipalOption {
   role: "BUYER" | "MERCHANT";
   email: string;

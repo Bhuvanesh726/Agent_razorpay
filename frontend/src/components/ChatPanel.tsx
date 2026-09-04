@@ -1,15 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ScrollText, ShieldAlert, Sparkles } from "lucide-react";
-import { confirmAgentCredentialAction, fetchAuditTrail, sendAgentCredentialMessage } from "@/lib/api";
-import { getOrCreateAgentSessionId, openRazorpayCheckout } from "@/lib/checkout";
+import { History, ScrollText, ShieldAlert, Sparkles } from "lucide-react";
+import {
+  confirmAgentCredentialAction,
+  fetchAgentConversation,
+  fetchAuditTrail,
+  sendAgentCredentialMessage,
+} from "@/lib/api";
+import { getOrCreateAgentSessionId, openRazorpayCheckout, setActiveAgentSessionId } from "@/lib/checkout";
 import type { AgentSummary, AuditTrail, ChatMessage, PaymentInfo, PendingAction, ProductSuggestion, UpsellOffer } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Table, TableWrap, THead, Th, Tr, Td } from "@/components/ui/Table";
 import ProductSuggestionCard from "@/components/ProductSuggestionCard";
+import ConversationHistory from "@/components/ConversationHistory";
 
 interface Props {
   agents: AgentSummary[];
@@ -51,6 +57,8 @@ export default function ChatPanel({ agents, onCartChanged }: Props) {
   const [productSuggestion, setProductSuggestion] = useState<ProductSuggestion | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAudit, setShowAudit] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [loadingConversation, setLoadingConversation] = useState(false);
   const [auditTrail, setAuditTrail] = useState<AuditTrail | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
   const [payingOrderId, setPayingOrderId] = useState<number | null>(null);
@@ -72,6 +80,44 @@ export default function ChatPanel({ agents, onCartChanged }: Props) {
     setError(null);
     setShowAudit(false);
     setAuditTrail(null);
+    setShowHistory(false);
+  }
+
+  /** Load a past conversation into the panel. The transcript comes from
+   *  agent_messages on the server; the session id becomes the active one so
+   *  the next message continues that conversation rather than starting a new. */
+  async function openConversation(nextSessionId: string) {
+    if (nextSessionId === sessionId) {
+      setShowHistory(false);
+      return;
+    }
+    setLoadingConversation(true);
+    setError(null);
+    try {
+      const detail = await fetchAgentConversation(activeCredentialId, nextSessionId);
+      setSessionId(nextSessionId);
+      setActiveAgentSessionId(activeCredentialId, nextSessionId);
+      setMessages(
+        detail.messages.map((m) => ({
+          id: `${nextSessionId}-${m.seq}`,
+          role: m.role === "user" ? "user" : "assistant",
+          text: m.content ?? "",
+          timestamp: Date.now(),
+        })),
+      );
+      // Pending/upsell state belongs to whatever turn was in flight, not to a
+      // transcript being read back.
+      setPending(null);
+      setUpsell(null);
+      setProductSuggestion(null);
+      setAuditTrail(null);
+      setShowAudit(false);
+      setShowHistory(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open that conversation.");
+    } finally {
+      setLoadingConversation(false);
+    }
   }
 
   function pushMessage(role: ChatMessage["role"], text: string) {
@@ -227,14 +273,34 @@ export default function ChatPanel({ agents, onCartChanged }: Props) {
         ) : (
           <h2 className="truncate text-sm font-semibold tracking-tight text-ink">{activeAgent?.name ?? "Shopping assistant"}</h2>
         )}
-        <button
-          onClick={toggleAudit}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-ink-soft transition-colors duration-150 hover:bg-black/[0.04] hover:text-ink"
-        >
-          <ScrollText size={13} />
-          {showAudit ? "Hide" : "Show"} audit trail
-        </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            aria-expanded={showHistory}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-ink-soft transition-colors duration-150 hover:bg-black/[0.04] hover:text-ink"
+          >
+            <History size={13} />
+            History
+          </button>
+          <button
+            onClick={toggleAudit}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-ink-soft transition-colors duration-150 hover:bg-black/[0.04] hover:text-ink"
+          >
+            <ScrollText size={13} />
+            {showAudit ? "Hide" : "Show"} audit trail
+          </button>
+        </div>
       </div>
+
+      {showHistory && activeCredentialId && (
+        <ConversationHistory
+          credentialId={activeCredentialId}
+          activeSessionId={sessionId}
+          onOpen={openConversation}
+        />
+      )}
+
+      {loadingConversation && <p className="text-xs text-ink-faint">Loading conversation…</p>}
 
       <div ref={scrollRef} className="flex max-h-80 min-h-40 flex-col gap-3 overflow-y-auto border-t border-line pt-3">
         {messages.length === 0 && (

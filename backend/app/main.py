@@ -6,6 +6,7 @@ from app.auth import credentials_router, demo_login_router, oauth_router, onboar
 from app.core.config import settings
 from app.core.errors import CORSSafeServerErrorMiddleware
 from app.core.logging import RequestLoggingMiddleware, configure_logging
+from app.database import ensure_schema
 from app.routers import (
     agent,
     audit,
@@ -23,6 +24,9 @@ from app.routers import (
 from app.testing.chaos import ChaosHeaderMiddleware
 
 configure_logging()
+# Additive column migrations for databases created before a column existed.
+# Idempotent and cheap; see app/database.py.
+ensure_schema()
 
 app = FastAPI(title=settings.app_name)
 

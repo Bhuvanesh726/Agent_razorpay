@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import settings  # noqa: E402
-from app.database import Base, SessionLocal, engine  # noqa: E402
+from app.database import Base, SessionLocal, engine, ensure_schema  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.repositories import product_repo  # noqa: E402
 from app.testing.demo_login import demo_login_available, ensure_demo_environment  # noqa: E402
@@ -41,6 +41,7 @@ def _seed_demo_user(db) -> None:
 
 def main() -> None:
     Base.metadata.create_all(bind=engine)
+    ensure_schema()
 
     catalog = json.loads(DATA_FILE.read_text(encoding="utf-8"))
     products = catalog["products"]

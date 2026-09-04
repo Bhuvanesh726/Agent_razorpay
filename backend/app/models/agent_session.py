@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import settings
@@ -20,6 +20,23 @@ class AgentSession(Base):
 
     # "active" | "awaiting_confirmation"
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+
+    # --- Layer 7: conversation history ---
+    # Which agent credential this conversation belongs to. Sessions are owned
+    # by user_id (a buyer), but a buyer can hold several agents, so user_id
+    # alone cannot scope a history list to the agent currently selected in the
+    # chat header. Nullable: sessions created before Layer 7, and any created
+    # outside an agent principal, have none.
+    credential_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Short label generated from the first user message (app/agent/titles.py).
+    # Nullable — a conversation with no user turn yet has no title, and title
+    # generation is allowed to fail without breaking the chat.
+    title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Denormalised so the history list renders without counting rows per
+    # conversation. Maintained in agent_session_repo.append_message.
+    message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_active_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # The single tool call currently on hold pending user confirmation.
     # {"id": ..., "name": ..., "arguments": {...}}

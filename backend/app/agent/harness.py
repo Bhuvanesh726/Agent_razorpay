@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.agent.tools import TOOL_FUNCTIONS, TOOL_SCHEMAS
+from app.agent.titles import fallback_title, schedule_title_generation
 from app.audit.service import AuditService
 from app.auth.context import get_current_principal
 from app.core.config import settings
@@ -147,8 +148,18 @@ def handle_chat(
         )
 
     turn_started_at = datetime.now(timezone.utc).replace(tzinfo=None)  # naive-UTC: matches how SQLite round-trips timestamp
+    is_first_user_message = session.title is None
     agent_session_repo.append_message(db, session_id, "user", content=user_message)
     db.commit()
+
+    if is_first_user_message:
+        # A usable title immediately, at zero cost: a truncation of what the
+        # buyer just typed. The nicer generated one replaces it from a
+        # background thread, so no part of this turn waits on a model call
+        # that exists only to label a list row. See app/agent/titles.py.
+        session.title = fallback_title(user_message)
+        db.commit()
+        schedule_title_generation(session_id)
     _audit.log_event(
         db,
         session_id=session_id,

@@ -22,7 +22,13 @@ from app.auth.security import generate_agent_key, hash_agent_key
 from app.core.config import settings
 from app.database import get_db
 from app.models.agent_credential import AgentCredential
+from app.repositories import agent_session_repo
 from app.routers.agent import to_response
+from app.schemas.conversations import (
+    ConversationDetailOut,
+    ConversationMessageOut,
+    ConversationSummaryOut,
+)
 from app.schemas.agent import AgentChatRequest, ChatResponse, ConfirmRequest, PaymentInfoOut, QuickBuyRequest
 from app.schemas.agents import (
     AgentActionOut,
@@ -301,3 +307,114 @@ def quick_buy(
     if result.payment is None:
         raise HTTPException(status_code=400, detail=result.reply)
     return PaymentInfoOut(**result.payment)
+
+
+# --- Layer 7: conversation history -----------------------------------------
+#
+# Scoped to one credential: the chat header switches agents, and each agent's
+# history is its own. Ownership is enforced twice over — the credential must
+# belong to this buyer (_get_owned_active_embedded_credential), and the
+# listing is filtered by owner_user_id as well as credential_id, so a
+# credential id alone can never surface another buyer's conversations.
+
+
+@router.get("/api/agents/{credential_id}/conversations", response_model=list[ConversationSummaryOut])
+@requires(AuthRequirement.BUYER)
+def list_agent_conversations(
+    credential_id: str,
+    include_archived: bool = False,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+) -> list[ConversationSummaryOut]:
+    cred = _get_owned_active_embedded_credential(db, credential_id, principal)
+    sessions = agent_session_repo.list_conversations(
+        db,
+        user_id=cred.owner_user_id,
+        credential_id=cred.id,
+        include_archived=include_archived,
+    )
+    return [
+        ConversationSummaryOut(
+            session_id=s.session_id,
+            title=s.title,
+            message_count=s.message_count or 0,
+            last_active_at=s.last_active_at,
+            created_at=s.created_at,
+            archived=bool(s.archived),
+            status=s.status,
+        )
+        for s in sessions
+    ]
+
+
+def _owned_conversation(db: Session, credential_id: str, session_id: str, principal: Principal):
+    cred = _get_owned_active_embedded_credential(db, credential_id, principal)
+    session = agent_session_repo.get_session(db, session_id)
+    # One 404 for "no such conversation" and for "not yours", so this endpoint
+    # cannot be used to probe which session ids exist.
+    if session is None or session.user_id != cred.owner_user_id or session.credential_id != cred.id:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return session
+
+
+@router.get(
+    "/api/agents/{credential_id}/conversations/{session_id}", response_model=ConversationDetailOut
+)
+@requires(AuthRequirement.BUYER)
+def get_agent_conversation(
+    credential_id: str,
+    session_id: str,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+) -> ConversationDetailOut:
+    """Read straight from agent_messages, which already stores the transcript
+    (app/models/agent_session.py). Deliberately NOT app/audit/replay.py: that
+    produces an engineering decision trail ("[agent] tool_executed
+    decision=ALLOW rule=..."), which is the right thing for the merchant audit
+    viewer and the wrong thing to show a buyer as their own conversation.
+    """
+    session = _owned_conversation(db, credential_id, session_id, principal)
+    messages = agent_session_repo.list_messages(db, session.session_id)
+    return ConversationDetailOut(
+        session_id=session.session_id,
+        title=session.title,
+        archived=bool(session.archived),
+        status=session.status,
+        messages=[
+            ConversationMessageOut(seq=m.seq, role=m.role, content=m.content, tool_name=m.tool_name)
+            for m in messages
+            # The system prompt is scaffolding, not conversation, and tool
+            # result rows are raw JSON — neither belongs in a buyer-facing
+            # transcript. The full record stays in the audit trail.
+            if m.role in ("user", "assistant") and m.content
+        ],
+    )
+
+
+@router.post(
+    "/api/agents/{credential_id}/conversations/{session_id}/archive",
+    response_model=ConversationSummaryOut,
+)
+@requires(AuthRequirement.BUYER)
+def archive_agent_conversation(
+    credential_id: str,
+    session_id: str,
+    archived: bool = True,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+) -> ConversationSummaryOut:
+    """Archive, never delete: a conversation is the human-readable half of a
+    record whose other half is an immutable audit trail, and letting a buyer
+    erase one while the other persists would make the two disagree."""
+    session = _owned_conversation(db, credential_id, session_id, principal)
+    session.archived = archived
+    db.commit()
+    return ConversationSummaryOut(
+        session_id=session.session_id,
+        title=session.title,
+        message_count=session.message_count or 0,
+        last_active_at=session.last_active_at,
+        created_at=session.created_at,
+        archived=bool(session.archived),
+        status=session.status,
+    )

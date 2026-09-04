@@ -11,6 +11,8 @@ import type {
   Cart,
   Category,
   ContentGap,
+  ConversationDetail,
+  ConversationSummary,
   DemoLoginOptions,
   DemoLoginResult,
   DashboardSummary,
@@ -303,6 +305,35 @@ export function devSwitchRole(role: "BUYER" | "MERCHANT"): Promise<RoleChoiceRes
     method: "POST",
     body: JSON.stringify({ role }),
   });
+}
+
+// --- Layer 7: conversation history (scoped to one agent credential) ---
+
+export function fetchAgentConversations(
+  credentialId: string,
+  includeArchived = false,
+): Promise<ConversationSummary[]> {
+  return request<ConversationSummary[]>(
+    `/api/agents/${credentialId}/conversations?include_archived=${includeArchived}`,
+  );
+}
+
+export function fetchAgentConversation(
+  credentialId: string,
+  sessionId: string,
+): Promise<ConversationDetail> {
+  return request<ConversationDetail>(`/api/agents/${credentialId}/conversations/${sessionId}`);
+}
+
+export function archiveAgentConversation(
+  credentialId: string,
+  sessionId: string,
+  archived = true,
+): Promise<ConversationSummary> {
+  return request<ConversationSummary>(
+    `/api/agents/${credentialId}/conversations/${sessionId}/archive?archived=${archived}`,
+    { method: "POST" },
+  );
 }
 
 // --- Development-only demo sign-in (backend/app/testing/demo_login.py) ---
