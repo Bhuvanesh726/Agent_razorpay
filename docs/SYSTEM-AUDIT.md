@@ -166,7 +166,7 @@ Two properties worth stating because they are easy to get wrong and were got rig
 
 - **Evidence is aggregate-only** — counts, category, attributes. No `raw_query`, no `session_id`.
   The privacy boundary is enforced by the queries themselves, and asserted in
-  `tests/test_demand_privacy.py`.
+  `tests/test_demand_signals.py::test_notification_evidence_never_contains_raw_query_or_session_id`.
 - **Counted by distinct session, not by signal** — one buyer asking five times raises nothing.
 
 An empty notifications panel means the threshold has genuinely not been crossed. That is correct
