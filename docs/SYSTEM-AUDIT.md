@@ -133,7 +133,7 @@ architectural answer and is not implemented.
 update or delete of an `AuditEvent` anywhere in the codebase. Append-only by construction rather
 than by policy.
 
-36 distinct event types, including several most systems never record: `injection_detected`,
+38 distinct event types, including several most systems never record: `injection_detected`,
 `signature_rejected`, `iteration_limit_hit`, `malformed_tool_call`, `control_group_split`,
 `upsell_blocked`, `duplicate_payment_prevented`, `payment_recovered_after_failure`.
 

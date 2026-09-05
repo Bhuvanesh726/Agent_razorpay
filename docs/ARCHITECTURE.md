@@ -248,7 +248,7 @@ Grouped by concern:
 | **Commerce** | `products`, `carts`, `cart_items`, `orders`, `payments` | Money is **integer paise**, everywhere |
 | **Agent** | `agent_sessions`, `agent_messages` | Full transcript; a session belongs to one credential |
 | **Growth** | `demand_signals`, `merchant_notifications`, `product_views`, `campaign_*` | `demand_signals` has **no user_id column at all** |
-| **Audit** | `audit_events` | Append-only. 36 event types |
+| **Audit** | `audit_events` | Append-only. 38 event types |
 
 Two deliberate absences. `demand_signals` carries no buyer identity — "distinct buyers" is
 approximated by distinct session, so a merchant-facing aggregate *cannot* be de-anonymised, because
@@ -441,7 +441,7 @@ untrusted proposal.
 | Requirement | How it is met | Honest status |
 |---|---|---|
 | **Idempotency** | Content + cart hash with a DB `UNIQUE` constraint; insert-then-catch, never check-then-insert | Met |
-| **Observability** | 36 audit event types; structured JSON logs with `request_id` threaded through; session replay | Met |
+| **Observability** | 38 audit event types; structured JSON logs with `request_id` threaded through; session replay | Met |
 | **Reliability** | Retry → fallback model → circuit breaker; 7 injectable faults | Met |
 | **Security** | Default-deny routing; HMAC verified server-side; keys hashed at rest; scoped credentials | Met for the modelled threats |
 | **Data integrity** | Pure state machine; integer money; append-only audit | Met |
